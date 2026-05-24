@@ -1,0 +1,2119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Bok Log">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#13150f">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<link rel="apple-touch-icon" sizes="180x180" href="icon.png">
+<link rel="icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<style>
+  :root{
+    --bg:#13150f; --panel:#1d2017; --panel2:#262a1d;
+    --line:#3a3f2c; --text:#f1efe3; --muted:#a7a994;
+    --accent:#c1631d; --accent2:#e0832f; --good:#5dca7a;
+    --ring:#4a5036; --you:#e0832f; --buck:#4f9bdd;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-text-size-adjust:100%;}
+  body{max-width:520px; margin:0 auto; padding:12px 12px 28px; min-height:100vh;}
+
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .title{font-size:16px; font-weight:600; letter-spacing:.3px;}
+  .session{font-size:12px; color:var(--muted); max-width:160px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; text-align:right;}
+
+  .countcard{display:flex; align-items:baseline; gap:10px; background:var(--panel);
+    border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px;}
+  .countnum{font-size:42px; font-weight:700; line-height:1; color:var(--accent2);}
+  .countlbl{font-size:14px; color:var(--muted);}
+
+  .radarwrap{background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:12px; margin-bottom:12px;}
+  svg{width:100%; display:block;}
+  .rlbl{font-size:11px; fill:var(--muted);}
+  .rring{fill:none; stroke:var(--ring); stroke-width:1;}
+  .raxis{stroke:var(--ring); stroke-width:1; opacity:.6;}
+
+  .bigbtn{width:100%; border:none; border-radius:14px; padding:20px; font-size:20px;
+    font-weight:700; color:#fff; background:var(--accent); margin-bottom:12px;
+    box-shadow:0 2px 0 #8c4612; cursor:pointer;}
+  .bigbtn:active{transform:translateY(1px); box-shadow:0 1px 0 #8c4612;}
+  .bigbtn[disabled]{opacity:.45;}
+
+  .list{display:flex; flex-direction:column; gap:8px;}
+  .item{display:flex; align-items:center; gap:12px; background:var(--panel);
+    border:1px solid var(--line); border-radius:12px; padding:10px 12px;}
+  .badge{flex:0 0 auto; width:38px; height:38px; border-radius:50%; background:var(--buck);
+    color:#06243f; font-weight:700; font-size:16px; display:flex; align-items:center;
+    justify-content:center;}
+  .meta{flex:1; min-width:0;}
+  .metatop{font-size:15px; font-weight:600;}
+  .metabot{font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis;}
+  .empty{color:var(--muted); font-size:14px; text-align:center; padding:18px;}
+
+  .footer{display:flex; gap:8px; margin-top:16px;}
+  .ghost{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:12px; padding:12px; font-size:14px; font-weight:600; cursor:pointer;}
+  .ghost:active{transform:translateY(1px);}
+
+  .toast{position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+    background:#000; color:#fff; padding:10px 16px; border-radius:24px; font-size:14px;
+    opacity:0; transition:opacity .2s; pointer-events:none; z-index:50; max-width:90%;}
+  .toast.show{opacity:.94;}
+
+  /* ---- modal ---- */
+  .overlay{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+    align-items:flex-end; justify-content:center; z-index:40;}
+  .overlay.show{display:flex;}
+  .sheet{width:100%; max-width:520px; background:var(--panel); border-radius:18px 18px 0 0;
+    border-top:1px solid var(--line); padding:16px 16px 22px; max-height:94vh; overflow:auto;}
+  .sheet h3{margin:2px 0 14px; font-size:18px;}
+
+  .diallabel{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .diallabel span{font-size:14px; color:var(--muted);}
+  .bearingval{font-size:20px; font-weight:700; color:var(--accent2);}
+  .dialwrap{position:relative; width:100%; max-width:300px; margin:0 auto 10px; touch-action:pan-y;}
+  .compassbtn{width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:12px; padding:11px; font-size:14px; font-weight:600; margin-bottom:14px; cursor:pointer;}
+  .compassbtn.live{border-color:var(--good); color:var(--good);}
+
+  label.fld{display:block; font-size:13px; color:var(--muted); margin:0 0 5px;}
+  .row{margin-bottom:14px;}
+  input,textarea{width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:12px; padding:13px; font-size:17px; font-family:inherit;}
+  input:focus,textarea:focus{outline:none; border-color:var(--accent2);}
+  textarea{resize:none;}
+  .quick{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;}
+  .chip{background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:20px;
+    padding:8px 14px; font-size:14px; cursor:pointer;}
+  .chip:active{background:var(--panel2);}
+
+  .actions{display:flex; gap:10px; margin-top:6px;}
+  .actions button{flex:1; border:none; border-radius:12px; padding:16px; font-size:17px;
+    font-weight:700; cursor:pointer;}
+  .cancel{background:var(--panel2); color:var(--text); border:1px solid var(--line)!important;}
+  .save{background:var(--accent); color:#fff;}
+  .save:active,.cancel:active{transform:translateY(1px);}
+
+  .gps{font-size:11px; color:var(--muted); margin-top:8px; text-align:center;}
+
+  .whoami{font-size:12px; color:var(--muted); background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:8px 12px; margin-bottom:10px; cursor:pointer;}
+  .whoami span{color:var(--text); font-weight:600;}
+  .whoami .editlink{color:var(--accent2); float:right; font-weight:600;}
+
+  .toggle{display:flex; gap:6px; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:4px; margin-bottom:12px;}
+  .toggle-btn{flex:1; border:none; background:transparent; color:var(--muted); font-size:15px;
+    font-weight:600; padding:11px; border-radius:9px; cursor:pointer;}
+  .toggle-btn.active{background:var(--accent); color:#fff;}
+
+  .grouprow{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .grouppill{background:var(--panel); border:1px solid var(--line); border-radius:20px;
+    padding:8px 14px; font-size:13px; color:var(--muted);}
+  .grouppill span{color:var(--accent2); font-weight:700; font-size:15px;}
+  .refreshbtn{flex:1; padding:9px;}
+
+  .toggles{display:flex; gap:10px; margin-bottom:12px;}
+  .switchrow{flex:1; display:flex; align-items:center; justify-content:space-between;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:11px 14px;}
+  .switchlbl{font-size:14px; color:var(--ink);}
+  .switch{position:relative; display:inline-block; width:46px; height:26px; flex:none;}
+  .switch input{opacity:0; width:0; height:0;}
+  .switch .slider{position:absolute; cursor:pointer; inset:0; background:#3a3d33;
+    transition:.2s; border-radius:26px;}
+  .switch .slider:before{content:""; position:absolute; height:20px; width:20px; left:3px; top:3px;
+    background:#fff; transition:.2s; border-radius:50%;}
+  .switch input:checked + .slider{background:var(--accent);}
+  .switch input:checked + .slider:before{transform:translateX(20px);}
+
+  .mapwrap{position:relative; width:100%; height:340px; background:var(--panel);
+    border:1px solid var(--line); border-radius:14px; overflow:hidden; margin-bottom:12px;}
+  #map{position:absolute; inset:0; width:100%; height:100%;}
+  .mapmsg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    text-align:center; padding:20px; color:var(--muted); font-size:14px; pointer-events:none;}
+  .mapmsg.hide{display:none;}
+
+  .hint{font-size:11px; color:var(--muted); margin-top:6px;}
+  .copybtn{flex:0 0 auto; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer;}
+  .tickbtn{flex:0 0 auto; width:38px; height:38px; border-radius:50%; background:var(--panel2);
+    border:1px solid var(--line); color:var(--muted); font-size:18px; cursor:pointer; margin-left:6px;}
+  .tickbtn.done{background:var(--good); border-color:var(--good); color:#06311a;}
+  .item.collected{opacity:.55;}
+  .item.collected .metatop{text-decoration:line-through;}
+
+  /* Hunter name labels on the map — text shadow keeps them readable on satellite */
+  .maplabel{ text-shadow: 0 0 3px #000, 0 0 3px #000, 0 1px 2px #000; }
+</style>
+</head>
+<body>
+
+  <div class="topbar" style="display:block;text-align:center;margin-bottom:12px;">
+    <svg viewBox="0 0 1074 888" style="height:42px;width:auto;display:block;margin:0 auto 4px;" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="translate(0.000000,888.000000) scale(0.100000,-0.100000)" fill="#e0832f" stroke="none">
+<path d="M2630 8185 c-20 -21 -32 -25 -81 -25 -51 0 -62 -4 -89 -30 -20 -19
+-41 -30 -60 -30 -37 0 -60 -23 -60 -60 0 -24 -18 -48 -90 -120 l-90 -91 0
+-269 c0 -269 0 -269 30 -300 20 -20 30 -41 30 -60 0 -24 18 -47 90 -120 72
+-73 90 -96 90 -120 0 -19 10 -40 30 -60 20 -20 30 -41 30 -61 0 -19 9 -38 26
+-54 14 -13 30 -43 35 -66 6 -25 22 -53 39 -69 29 -27 29 -28 24 -111 -8 -126
+-22 -138 -82 -76 -39 40 -39 50 -7 89 25 29 32 62 17 84 -18 29 -96 84 -118
+84 -36 0 -114 82 -114 120 0 25 -17 47 -90 119 -73 73 -90 95 -90 120 0 37
+-23 61 -60 61 -58 0 -60 -8 -60 -270 0 -239 0 -239 -30 -270 -44 -45 -44 -135
+0 -180 19 -20 30 -41 30 -60 0 -36 23 -60 60 -60 37 0 60 -24 60 -60 0 -24 18
+-48 90 -120 72 -73 90 -96 90 -120 0 -19 10 -40 30 -60 30 -31 30 -31 30 -240
+0 -209 0 -209 30 -240 30 -31 30 -31 30 -150 0 -119 0 -119 30 -150 20 -20 30
+-41 30 -60 0 -19 10 -40 30 -60 30 -31 30 -31 30 -299 0 -268 0 -268 25 -291
+14 -13 25 -31 25 -40 0 -9 -11 -27 -25 -40 -14 -14 -25 -35 -25 -50 0 -15 -11
+-36 -25 -50 -32 -30 -32 -50 0 -80 21 -20 25 -33 25 -81 0 -51 4 -62 30 -89
+30 -31 30 -31 30 -180 0 -149 0 -149 30 -180 20 -20 30 -41 30 -60 0 -19 10
+-40 30 -60 20 -20 30 -41 30 -60 0 -19 10 -40 30 -60 20 -20 30 -41 30 -60 0
+-22 14 -44 60 -90 46 -46 60 -68 60 -90 0 -22 14 -44 60 -90 46 -46 60 -68 60
+-90 0 -19 10 -40 30 -60 20 -20 30 -41 30 -60 0 -19 10 -40 30 -60 19 -20 30
+-41 30 -60 0 -37 23 -60 61 -60 42 0 179 -137 179 -180 0 -41 78 -120 120
+-120 22 0 44 -14 90 -60 47 -46 68 -60 90 -60 24 0 45 -16 105 -75 l75 -75 0
+-330 c0 -329 0 -329 30 -360 30 -31 30 -31 30 -735 l0 -705 360 0 360 0 0 225
+c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
+303 0 303 30 329 40 36 40 76 0 117 -40 41 -40 79 0 120 30 31 30 31 30 150 0
+119 0 119 30 150 29 29 30 34 30 120 0 89 0 89 45 135 46 45 46 45 705 45 659
+0 659 0 690 30 27 27 38 30 90 30 52 0 63 3 90 30 20 20 41 30 61 30 20 0 38
+9 55 28 25 26 30 27 157 32 126 5 132 6 135 27 2 14 -4 26 -18 33 -14 7 -20
+19 -18 33 3 20 10 22 70 25 68 3 68 3 173 -102 87 -87 105 -111 105 -135 0
+-20 10 -41 30 -61 20 -20 30 -41 30 -60 0 -22 14 -44 60 -90 46 -46 60 -68 60
+-90 0 -41 79 -120 120 -120 41 0 120 -79 120 -120 0 -19 10 -40 30 -60 27 -27
+30 -38 30 -90 0 -59 0 -59 90 -150 90 -91 90 -91 90 -180 0 -86 1 -91 30 -120
+30 -31 30 -31 30 -420 0 -389 0 -389 -30 -420 -29 -30 -30 -33 -30 -135 l0
+-105 300 0 300 0 0 75 c0 69 2 76 30 105 30 31 30 31 30 150 0 119 0 119 30
+150 27 27 30 38 30 90 0 52 3 63 30 90 29 29 30 34 30 120 0 86 1 91 30 120
+30 31 30 31 30 180 0 149 0 149 -30 180 -20 20 -30 41 -30 60 0 22 -14 44 -60
+90 -44 45 -60 68 -60 89 0 16 -10 37 -25 51 -30 28 -32 55 -5 70 23 12 28 60
+6 60 -27 0 -41 29 -22 48 16 16 19 15 44 -16 40 -48 76 -44 136 13 33 33 46
+53 46 73 0 17 10 38 25 52 32 30 32 50 0 80 -25 23 -25 23 -25 591 0 568 0
+568 -30 599 -30 31 -30 31 -30 210 0 179 0 179 -30 210 -30 31 -30 31 -30 180
+0 149 0 149 -30 180 -27 27 -30 38 -30 90 0 57 -2 61 -45 105 -33 33 -53 45
+-75 45 -37 0 -60 23 -60 61 0 43 -256 299 -300 299 -41 0 -120 78 -120 120 0
+37 -23 60 -60 60 -19 0 -40 11 -60 30 -31 30 -31 30 -390 30 -359 0 -359 0
+-390 -30 -31 -30 -31 -30 -180 -30 -149 0 -149 0 -180 -30 -31 -30 -31 -30
+-210 -30 -179 0 -179 0 -210 -30 -20 -20 -41 -30 -60 -30 -19 0 -40 -10 -60
+-30 -27 -27 -38 -30 -90 -30 -52 0 -63 -3 -90 -30 -29 -29 -34 -30 -120 -30
+-86 0 -91 -1 -120 -30 -31 -30 -31 -30 -600 -30 -569 0 -569 0 -600 -30 -20
+-20 -41 -30 -60 -30 -19 0 -40 -10 -60 -30 -29 -29 -34 -30 -120 -30 -89 0
+-89 0 -150 60 -60 60 -61 60 -120 60 -67 0 -90 15 -90 59 0 16 -10 37 -25 51
+-32 30 -32 50 0 80 46 43 25 110 -35 110 -55 0 -60 16 -60 180 0 149 0 149
+-30 180 -27 27 -30 38 -30 90 0 52 -3 63 -30 90 -38 38 -39 78 -5 110 14 13
+25 31 25 40 0 9 -11 27 -25 40 -34 32 -33 72 5 110 27 27 30 38 30 90 0 52 3
+63 30 90 30 31 30 31 30 210 0 180 0 180 75 255 59 59 82 75 104 75 38 0 61
+23 61 61 0 23 12 41 55 82 62 58 66 74 30 105 -21 19 -25 30 -25 80 0 49 4 62
+25 82 14 13 25 31 25 40 0 9 -11 27 -25 40 -24 22 -25 29 -25 142 0 108 -2
+120 -22 140 -12 12 -27 43 -34 68 -16 65 -52 65 -68 0 -15 -57 -190 -240 -230
+-240 -25 0 -77 -39 -143 -106 -38 -39 -38 -39 -38 -129 0 -97 -6 -115 -35
+-115 -29 0 -37 27 -36 117 1 82 1 82 59 138 41 41 60 68 66 96 5 22 21 51 35
+64 17 16 26 35 26 54 0 20 10 41 30 61 20 20 30 41 30 60 0 22 14 44 60 90 60
+61 60 61 60 120 0 52 3 63 30 90 30 31 30 31 30 180 0 149 0 149 -30 180 -20
+20 -30 41 -30 60 0 19 -10 40 -30 60 -20 20 -30 41 -30 60 0 43 -137 180 -180
+180 -19 0 -40 10 -60 30 -29 29 -34 30 -120 30 -99 0 -120 -11 -120 -60 0 -37
+24 -60 60 -60 19 0 40 -11 60 -30 20 -19 41 -30 60 -30 37 0 60 -23 60 -60 0
+-19 11 -40 30 -60 27 -27 30 -38 30 -90 0 -52 3 -63 30 -90 30 -31 30 -31 30
+-150 0 -119 0 -119 -30 -150 -20 -20 -30 -41 -30 -60 0 -19 -10 -40 -30 -60
+-20 -20 -30 -41 -30 -60 0 -24 -18 -47 -90 -120 -71 -71 -90 -97 -90 -119 0
+-16 -13 -44 -30 -66 -16 -21 -30 -48 -30 -61 0 -13 -13 -37 -30 -54 -20 -20
+-30 -41 -30 -60 0 -19 -10 -40 -30 -60 -19 -20 -30 -41 -30 -60 0 -66 -76 -83
+-122 -28 -24 30 -28 32 -43 17 -19 -19 -12 -41 18 -54 15 -7 23 -20 25 -45 2
+-20 14 -46 29 -62 47 -49 31 -63 -79 -66 -126 -4 -128 -1 -128 121 0 90 -1 93
+-30 119 -38 33 -40 75 -5 108 39 36 33 46 -90 166 -97 95 -115 118 -115 143 0
+25 -16 47 -90 121 -72 73 -90 96 -90 120 0 19 -10 40 -30 60 -30 31 -30 31
+-30 240 0 209 0 209 30 240 20 20 30 41 30 60 0 43 137 180 179 180 49 0 62
+23 59 99 -3 77 -25 92 -68 46z m5774 -5477 c14 -54 -2 -112 -31 -116 -26 -4
+-43 28 -43 78 0 83 56 112 74 38z m-60 -420 c14 -54 -2 -112 -31 -116 -26 -4
+-43 28 -43 78 0 83 56 112 74 38z m-4024 -1178 c18 -33 1 -116 -31 -157 -29
+-36 -29 -36 -28 -358 2 -334 1 -345 -31 -345 -33 0 -35 27 -30 392 5 349 5
+357 27 380 12 13 24 37 28 53 4 17 8 36 11 43 6 19 42 14 54 -8z"/>
+</g></svg>
+    <div class="title" style="font-size:24px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:var(--accent2);">Bok Log</div>
+    <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:3px;">voorsit jag tracker</div>
+    <div class="session" id="sessionLbl" style="display:none;">Loading…</div>
+  </div>
+
+  <div class="whoami" id="whoami" onclick="openSetup()">
+    <span id="whoName">—</span> · <span id="whoCode">—</span> <span class="editlink">switch hunt</span>
+  </div>
+
+  <div class="toggle">
+    <button id="tabMine" class="toggle-btn active" onclick="setView('mine')">My radar</button>
+    <button id="tabAll" class="toggle-btn" onclick="setLiveView()">Active Hunt</button>
+  </div>
+
+  <!-- MY RADAR view -->
+  <div id="viewMine">
+    <div class="countcard">
+      <div class="countnum" id="count">0</div>
+      <div class="countlbl">bucks logged</div>
+    </div>
+
+    <div class="radarwrap">
+      <svg id="radar" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" aria-label="Radar of logged bucks"></svg>
+    </div>
+
+    <div id="chairBanner" class="whoami" style="display:none; cursor:default; border-color:var(--accent);">
+      ⚠ Set your chair before logging — go to <b>Active Hunt</b> and tap <b>Set my chair here</b>.
+    </div>
+    <div id="pendingBadge" class="whoami" style="display:none; cursor:pointer; border-color:var(--accent2); color:var(--accent2);" onclick="syncQueue(true)"></div>
+    <button class="bigbtn" id="logBtn" onclick="openLog()">⌖ Log a buck</button>
+
+    <div class="list" id="list">
+      <div class="empty">No bucks logged yet.</div>
+    </div>
+
+    <div class="footer">
+      <button class="ghost" onclick="openHistory()">☰ History</button>
+      <button class="ghost" onclick="openSummary(state.code)">📊 Summary</button>
+      <button class="ghost" onclick="openEndHunt()">⛔ End hunt</button>
+    </div>
+    <button class="ghost" id="syncBtn" style="display:none; width:100%; margin-top:8px; border-color:var(--accent2); color:var(--accent2);" onclick="syncQueue(true)">⟳ Sync waiting bucks now</button>
+  </div>
+
+  <!-- EVERYONE view -->
+  <div id="viewAll" style="display:none;">
+    <button class="ghost" style="width:100%; margin-bottom:10px; padding:13px; font-size:15px;" onclick="pingPosition()">⚲ Set my chair here</button>
+    <div class="grouprow">
+      <div class="grouppill"><span id="hunterCount">0</span> hunters</div>
+      <div class="grouppill"><span id="groupBuckCount">0</span> bucks</div>
+      <button class="ghost refreshbtn" onclick="refreshGroup(true)">↻ Refresh</button>
+    </div>
+    <div class="toggles">
+      <label class="switchrow">
+        <span class="switchlbl">Show everyone</span>
+        <span class="switch">
+          <input type="checkbox" id="swEveryone" checked onchange="onToggleEveryone()">
+          <span class="slider"></span>
+        </span>
+      </label>
+      <label class="switchrow">
+        <span class="switchlbl">Show bucks</span>
+        <span class="switch">
+          <input type="checkbox" id="swBucks" checked onchange="onToggleBucks()">
+          <span class="slider"></span>
+        </span>
+      </label>
+    </div>
+    <div id="mapWrap" class="mapwrap"><div id="map"></div><div id="mapMsg" class="mapmsg">Loading map…</div></div>
+    <div class="list" id="groupList">
+      <div class="empty">No one has reported in yet on this code.</div>
+    </div>
+  </div>
+
+  <!-- ===== Log modal ===== -->
+  <div class="overlay" id="overlay">
+    <div class="sheet">
+      <h3 id="modalTitle">Log buck #1</h3>
+
+      <div class="diallabel">
+        <span>Direction (tap or drag the dial)</span>
+        <span class="bearingval" id="bearingVal">0°</span>
+      </div>
+
+      <div class="dialwrap">
+        <svg id="dial" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+
+      <button class="compassbtn" id="compassBtn" onclick="useCompass()">⊕ Use phone compass</button>
+
+      <div class="row">
+        <label class="fld">Distance (meters)</label>
+        <input id="distance" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 180">
+        <div class="quick">
+          <span class="chip" onclick="setDist(100)">100</span>
+          <span class="chip" onclick="setDist(150)">150</span>
+          <span class="chip" onclick="setDist(200)">200</span>
+          <span class="chip" onclick="setDist(250)">250</span>
+          <span class="chip" onclick="setDist(300)">300</span>
+          <span class="chip" onclick="setDist(350)">350</span>
+          <span class="chip" onclick="setDist(400)">400</span>
+          <span class="chip" onclick="setDist(450)">450</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <label class="fld">Notes</label>
+        <textarea id="notes" rows="2" placeholder="ram / ewe, still moving, behind bush…"></textarea>
+        <div class="quick">
+          <span class="chip" onclick="addNote('Male')">Male</span>
+          <span class="chip" onclick="addNote('Female')">Female</span>
+          <span class="chip" onclick="addNote('Head')">Head</span>
+          <span class="chip" onclick="addNote('Body')">Body</span>
+          <span class="chip" onclick="addNote('Still moving')">Still moving</span>
+          <span class="chip" onclick="addNote('Down')">Down</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="cancel" onclick="closeLog()">Cancel</button>
+        <button class="save" id="saveBtn" onclick="saveBuck()">Save buck</button>
+      </div>
+      <div class="gps" id="gpsState">Getting chair GPS…</div>
+    </div>
+  </div>
+
+  <!-- ===== Setup modal: choose / start / join ===== -->
+  <div class="overlay" id="setupOverlay">
+    <div class="sheet">
+
+      <!-- Stage 1: choose -->
+      <div id="stageChoose">
+        <h3>Bok Log</h3>
+        <div class="hint" style="margin-bottom:14px;">Start a new hunt, or join one you've been given a code for.</div>
+        <div class="actions" style="flex-direction:column; gap:10px;">
+          <button class="save" style="width:100%;" onclick="showStage('start')">Start a new hunt</button>
+          <button class="cancel" style="width:100%;" onclick="showStage('join')">Join a hunt</button>
+          <button class="cancel" id="keepHuntBtn" style="width:100%; display:none;" onclick="closeSetupIfAllowed()">Keep current hunt</button>
+        </div>
+      </div>
+
+      <!-- Stage 2: start a hunt (organizer) -->
+      <div id="stageStart" style="display:none;">
+        <h3>Start a new hunt</h3>
+        <div class="row">
+          <label class="fld">Organizer code</label>
+          <input id="startSecret" type="password" placeholder="your private code" autocomplete="off">
+          <div class="hint">Only you know this. It lets you create hunts.</div>
+        </div>
+        <div class="row">
+          <label class="fld">Hunt name</label>
+          <input id="startHuntName" type="text" placeholder="e.g. Barendsfontein 2026" autocomplete="off">
+        </div>
+        <div class="row">
+          <label class="fld">Your name</label>
+          <input id="startOrganizer" type="text" placeholder="e.g. Arné" autocomplete="off">
+        </div>
+        <div class="actions">
+          <button class="cancel" onclick="showStage('choose')">Back</button>
+          <button class="save" onclick="doCreateHunt()">Create hunt</button>
+        </div>
+      </div>
+
+      <!-- Stage 3: join a hunt -->
+      <div id="stageJoin" style="display:none;">
+        <h3>Join a hunt</h3>
+        <div class="row">
+          <label class="fld">Join code</label>
+          <input id="joinCode" type="text" placeholder="e.g. JAG-4F7K" autocomplete="off" style="text-transform:uppercase;">
+          <div class="hint">The code the hunt organizer shared with you.</div>
+        </div>
+        <div class="row">
+          <label class="fld">Your name</label>
+          <input id="joinName" type="text" placeholder="e.g. Kobus" autocomplete="off">
+        </div>
+        <div class="actions">
+          <button class="cancel" onclick="showStage('choose')">Back</button>
+          <button class="save" onclick="doJoinHunt()">Join</button>
+        </div>
+      </div>
+
+      <!-- Stage 4: hunt created — show shareable code -->
+      <div id="stageCreated" style="display:none;">
+        <h3>Hunt created</h3>
+        <div class="hint" style="margin-bottom:8px;">Share this code with your hunters. They tap "Join a hunt" and enter it.</div>
+        <div style="text-align:center; margin:14px 0;">
+          <div style="font-size:13px; color:var(--muted);" id="createdName">—</div>
+          <div style="font-size:34px; font-weight:700; color:var(--accent2); letter-spacing:2px;" id="createdCode">JAG-····</div>
+        </div>
+        <div class="actions">
+          <button class="cancel" onclick="copyJoinCode()">Copy code</button>
+          <button class="save" onclick="finishSetup()">Start hunting</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== Hunt history modal ===== -->
+  <div class="overlay" id="historyOverlay">
+    <div class="sheet">
+      <h3>Hunt history</h3>
+      <div class="hint" style="margin-bottom:12px;">Tap a past hunt to view its bucks and map. Your current hunt code stays unchanged.</div>
+      <div class="list" id="historyList">
+        <div class="empty">Loading…</div>
+      </div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="cancel" onclick="closeHistory()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== End hunt modal ===== -->
+  <div class="overlay" id="endOverlay">
+    <div class="sheet">
+      <h3>End this hunt</h3>
+      <div class="hint" style="margin-bottom:12px;">Ending closes logging. Everyone can still view the summary and download the report.</div>
+      <div class="row">
+        <label class="fld">Organizer code</label>
+        <input id="endSecret" type="password" placeholder="your private code" autocomplete="off">
+      </div>
+      <div class="actions">
+        <button class="cancel" onclick="closeEndHunt()">Cancel</button>
+        <button class="save" onclick="doEndHunt()">End hunt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Summary modal ===== -->
+  <div class="overlay" id="summaryOverlay">
+    <div class="sheet">
+      <h3 id="sumTitle">Hunt summary</h3>
+      <div id="sumStatus" class="hint" style="margin-bottom:12px;"></div>
+      <div id="sumCards" style="margin-bottom:14px;"></div>
+      <div class="list" id="sumHunters"></div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="cancel" onclick="closeSummary()">Close</button>
+        <button class="save" id="sumPdfBtn" onclick="downloadPdf()">Download PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Edit buck modal ===== -->
+  <div class="overlay" id="editOverlay">
+    <div class="sheet">
+      <h3>Edit buck</h3>
+      <div class="row">
+        <label class="fld">Direction (degrees)</label>
+        <input id="editBearing" type="number" inputmode="numeric">
+      </div>
+      <div class="row">
+        <label class="fld">Distance (meters)</label>
+        <input id="editDistance" type="number" inputmode="numeric">
+      </div>
+      <div class="row">
+        <label class="fld">Notes</label>
+        <textarea id="editNotes" rows="2"></textarea>
+      </div>
+      <div class="actions">
+        <button class="cancel" onclick="deleteThisBuck()" style="background:#5a1f1f;color:#fff;">Delete</button>
+        <button class="save" onclick="saveEditBuck()">Save</button>
+      </div>
+      <div class="actions" style="margin-top:8px;">
+        <button class="cancel" style="width:100%;" onclick="closeEditBuck()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+
+// ===== Firestore data layer (injected) =====
+// ============================================================
+//  Bok Log — Firestore data layer (replaces Google Apps Script)
+//  Keeps the SAME google.script.run API the UI already uses, so
+//  the rest of the app is unchanged. Each backend function is
+//  reimplemented against Firestore.
+// ============================================================
+
+var ORGANIZER_SECRET = 'agdt880618';
+var DELETE_PIN = '1806';
+
+// --- Firebase init (loaded via SDK <script> tags in the head) ---
+var fb = firebase.initializeApp({
+  apiKey: "AIzaSyB39XUetTv0b5vOPsvLve7mJTCp8-g-kmI",
+  authDomain: "bok-log.firebaseapp.com",
+  projectId: "bok-log",
+  storageBucket: "bok-log.firebasestorage.app",
+  messagingSenderId: "974023701185",
+  appId: "1:974023701185:web:9b98e5fd564591e3329a40"
+});
+var db = firebase.firestore();
+// Offline persistence: Firestore caches data and queues writes itself.
+try { db.enablePersistence({ synchronizeTabs: true }); } catch (e) {}
+
+// ---- helpers -------------------------------------------------
+function nowStamp_() {
+  var d = new Date();
+  function p(n){ return (n<10?'0':'')+n; }
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+
+         p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+function codeUp_(c){ return String(c||'').toUpperCase().trim(); }
+function huntRef_(code){ return db.collection('hunts').doc(codeUp_(code)); }
+function bucksRef_(code){ return huntRef_(code).collection('bucks'); }
+function posRef_(code){ return huntRef_(code).collection('positions'); }
+
+function makeJoinCode_() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var s = '';
+  for (var i=0;i<4;i++){ s += chars.charAt(Math.floor(Math.random()*chars.length)); }
+  return 'JAG-'+s;
+}
+
+// Project a buck's real lat/lng from chair + bearing + distance.
+function projectPosition_(lat, lng, bearingDeg, distM) {
+  lat = Number(lat); lng = Number(lng);
+  var d = Number(distM); var b = Number(bearingDeg);
+  if (!lat || !lng || !d) return { lat:'', lng:'' };
+  var R = 6378137;
+  var br = b * Math.PI/180;
+  var la = lat * Math.PI/180, lo = lng * Math.PI/180;
+  var la2 = Math.asin(Math.sin(la)*Math.cos(d/R) + Math.cos(la)*Math.sin(d/R)*Math.cos(br));
+  var lo2 = lo + Math.atan2(Math.sin(br)*Math.sin(d/R)*Math.cos(la),
+                            Math.cos(d/R)-Math.sin(la)*Math.sin(la2));
+  return { lat: la2*180/Math.PI, lng: lo2*180/Math.PI };
+}
+
+function tally_(s, notes) {
+  s.total++;
+  var n = String(notes||'').toLowerCase();
+  if (n.indexOf('female')>=0) s.female++; else if (n.indexOf('male')>=0) s.male++;
+  if (n.indexOf('head')>=0) s.head++; else if (n.indexOf('body')>=0) s.body++;
+}
+function blankStats_(){ return {total:0,male:0,female:0,head:0,body:0}; }
+
+// ============================================================
+//  The 17 backend functions, returning Promises that resolve to
+//  the SAME shapes the old Apps Script returned.
+// ============================================================
+var API = {};
+
+API.createHunt = function(data){
+  if (!data || String(data.secret||'') !== ORGANIZER_SECRET)
+    return Promise.resolve({ ok:false, error:'Wrong organizer code.' });
+  var huntName = String(data.huntName||'').trim();
+  var organizer = String(data.organizer||'').trim();
+  if (!huntName) return Promise.resolve({ ok:false, error:'Please enter a hunt name.' });
+  if (!organizer) return Promise.resolve({ ok:false, error:'Please enter your name.' });
+  var code = makeJoinCode_();
+  return huntRef_(code).set({
+    joinCode: code, huntName: huntName, created: nowStamp_(),
+    createdBy: organizer, status: 'open', ended: ''
+  }).then(function(){ return { ok:true, joinCode:code, huntName:huntName }; });
+};
+
+API.joinHunt = function(data){
+  var code = codeUp_(data && data.joinCode);
+  if (!code) return Promise.resolve({ ok:false, error:'Enter a join code.' });
+  return huntRef_(code).get().then(function(doc){
+    if (!doc.exists) return { ok:false, error:'No hunt found with that code.' };
+    var h = doc.data();
+    return { ok:true, joinCode:h.joinCode, huntName:h.huntName, status:h.status };
+  });
+};
+
+API.getHuntName = function(code){
+  return huntRef_(code).get().then(function(doc){
+    if (!doc.exists) return { ok:true, huntName:'', status:'' };
+    var h = doc.data();
+    return { ok:true, huntName:h.huntName||'', status:h.status||'' };
+  });
+};
+
+// "Session" now means: this hunter's own bucks in the current hunt, read live
+// from Firestore. Uses the browser's `state` (same page) for code + name.
+API.getSession = function(){
+  try{
+    var code = (typeof state!=='undefined' && state.code) ? state.code : '';
+    var name = (typeof state!=='undefined' && state.name) ? state.name : '';
+    if(!code) return Promise.resolve({ ok:true, session:'Hunt', count:0, bucks:[] });
+    return bucksRef_(code).get().then(function(snap){
+      var mine = [];
+      snap.forEach(function(d){
+        var b = d.data();
+        if (b.deleted) return;
+        if (name && String(b.hunter||'').toLowerCase().trim() !== name.toLowerCase().trim()) return;
+        mine.push({
+          row: d.id, number: b.number, bearing: b.bearing, distance: b.distance,
+          notes: b.notes||'', timestamp: b.timestamp||'', collected: !!b.collected
+        });
+      });
+      mine.sort(function(a,b){ return (a.number||0)-(b.number||0); });
+      return { ok:true, session:'Hunt', count: mine.length, bucks: mine };
+    }).catch(function(){ return { ok:true, session:'Hunt', count:0, bucks:[] }; });
+  }catch(e){
+    return Promise.resolve({ ok:true, session:'Hunt', count:0, bucks:[] });
+  }
+};
+API.startSession = function(){ return API.getSession(); };
+
+API.saveBuck = function(data){
+  data = data || {};
+  var code = codeUp_(data.code);
+  if (!code) return Promise.resolve({ ok:false, error:'No hunt code.' });
+  return huntRef_(code).get().then(function(doc){
+    if (doc.exists && doc.data().status === 'ended')
+      return { ok:false, error:'This hunt has ended — logging is closed.' };
+    // Buck number = current count for this hunter +1 (simple per-hunt count).
+    return bucksRef_(code).where('deleted','==',false).get().then(function(snap){
+      var number = snap.size + 1;
+      var bp = projectPosition_(data.lat, data.lng, data.bearing, data.distance);
+      var buck = {
+        timestamp: nowStamp_(),
+        number: number,
+        bearing: Number(data.bearing)||0,
+        distance: data.distance===''?'':(Number(data.distance)||0),
+        notes: String(data.notes||''),
+        chairLat: data.lat===''?'':Number(data.lat),
+        chairLng: data.lng===''?'':Number(data.lng),
+        hunter: String(data.hunter||''),
+        code: code,
+        buckLat: bp.lat, buckLng: bp.lng,
+        collected: false, deleted: false
+      };
+      return bucksRef_(code).add(buck).then(function(ref){
+        return { ok:true, count:number, buck:{
+          row: ref.id, number:number, bearing:buck.bearing, distance:buck.distance,
+          notes:buck.notes, timestamp:buck.timestamp, hunter:buck.hunter,
+          buckLat:buck.buckLat, buckLng:buck.buckLng, collected:false
+        }};
+      });
+    });
+  });
+};
+
+API.getGroup = function(code){
+  code = codeUp_(code);
+  var hunters = [], bucks = [];
+  return posRef_(code).get().then(function(psnap){
+    psnap.forEach(function(d){
+      var p = d.data();
+      hunters.push({ hunter:p.hunter, updated:p.updated||'',
+        lat:(p.lat===undefined?'':p.lat), lng:(p.lng===undefined?'':p.lng) });
+    });
+    return bucksRef_(code).get();
+  }).then(function(bsnap){
+    bsnap.forEach(function(d){
+      var b = d.data();
+      if (b.deleted) return;
+      bucks.push({
+        row: d.id, timestamp:b.timestamp||'', number:b.number,
+        bearing:b.bearing, distance:b.distance, notes:b.notes||'',
+        hunter:b.hunter||'',
+        buckLat:(b.buckLat===undefined?'':b.buckLat),
+        buckLng:(b.buckLng===undefined?'':b.buckLng),
+        collected: !!b.collected
+      });
+    });
+    bucks.sort(function(a,b){ return (a.number||0)-(b.number||0); });
+    return { ok:true, hunters:hunters, bucks:bucks };
+  });
+};
+
+API.updatePosition = function(data){
+  if (!data || !data.code || !data.hunter)
+    return Promise.resolve({ ok:false, error:'Need a name and a hunt code.' });
+  var code = codeUp_(data.code);
+  // One doc per hunter (id = hunter name lowercased) → overwrites, never dupes.
+  var id = String(data.hunter).toLowerCase().trim();
+  return posRef_(code).doc(id).set({
+    hunter: String(data.hunter), updated: nowStamp_(),
+    lat: Number(data.lat), lng: Number(data.lng),
+    accuracy: data.accuracy===''?'':Number(data.accuracy)
+  }).then(function(){ return { ok:true }; });
+};
+
+API.setCollected = function(data){
+  var code = codeUp_(data.code);
+  return bucksRef_(code).doc(String(data.row)).update({ collected: !!data.collected })
+    .then(function(){ return { ok:true }; })
+    .catch(function(e){ return { ok:false, error:String(e) }; });
+};
+
+API.editBuck = function(data){
+  var code = codeUp_(data.code);
+  var ref = bucksRef_(code).doc(String(data.row));
+  return ref.get().then(function(doc){
+    if (!doc.exists) return { ok:false, error:'Buck not found.' };
+    var b = doc.data();
+    if (String(b.hunter||'').toLowerCase().trim() !== String(data.hunter||'').toLowerCase().trim())
+      return { ok:false, error:'You can only change your own bucks.' };
+    var bp = projectPosition_(b.chairLat, b.chairLng, data.bearing, data.distance);
+    return ref.update({
+      bearing: Number(data.bearing)||0,
+      distance: data.distance===''?'':(Number(data.distance)||0),
+      notes: String(data.notes||''),
+      buckLat: bp.lat, buckLng: bp.lng
+    }).then(function(){ return { ok:true }; });
+  });
+};
+
+API.deleteBuck = function(data){
+  var code = codeUp_(data.code);
+  var ref = bucksRef_(code).doc(String(data.row));
+  return ref.get().then(function(doc){
+    if (!doc.exists) return { ok:false, error:'Buck not found.' };
+    var b = doc.data();
+    if (String(b.hunter||'').toLowerCase().trim() !== String(data.hunter||'').toLowerCase().trim())
+      return { ok:false, error:'You can only change your own bucks.' };
+    return ref.update({ deleted:true }).then(function(){ return { ok:true }; });
+  });
+};
+
+API.endHunt = function(data){
+  if (!data || String(data.secret||'') !== ORGANIZER_SECRET)
+    return Promise.resolve({ ok:false, error:'Wrong organizer code.' });
+  return huntRef_(data.joinCode).update({ status:'ended', ended: nowStamp_() })
+    .then(function(){ return { ok:true }; })
+    .catch(function(){ return { ok:false, error:'Hunt not found.' }; });
+};
+
+API.huntSummary = function(code){
+  code = codeUp_(code);
+  var s = blankStats_(), perHunter = {}, order = [];
+  return huntRef_(code).get().then(function(hd){
+    var hunt = hd.exists ? hd.data() : null;
+    return bucksRef_(code).get().then(function(snap){
+      snap.forEach(function(d){
+        var b = d.data(); if (b.deleted) return;
+        var hunter = b.hunter || 'Unknown';
+        if (!perHunter[hunter]){ perHunter[hunter]=blankStats_(); order.push(hunter); }
+        tally_(s, b.notes); tally_(perHunter[hunter], b.notes);
+      });
+      var hunters = order.map(function(h){ return { hunter:h, stats:perHunter[h] }; });
+      return { ok:true, huntName: hunt?hunt.huntName:code, status: hunt?hunt.status:'',
+        ended: hunt?hunt.ended:'', total:s.total, male:s.male, female:s.female,
+        head:s.head, body:s.body, hunters:hunters };
+    });
+  });
+};
+
+API.listHunts = function(){
+  return db.collection('hunts').get().then(function(snap){
+    var hunts = [];
+    var tasks = [];
+    snap.forEach(function(d){
+      var h = d.data();
+      tasks.push(bucksRef_(h.joinCode).get().then(function(bs){
+        var n=0, names={};
+        bs.forEach(function(bd){ var b=bd.data(); if(!b.deleted){ n++; if(b.hunter) names[b.hunter]=1; } });
+        hunts.push({ code:h.joinCode, huntName:h.huntName, first:h.created,
+          count:n, hunters:Object.keys(names).join(', '), status:h.status });
+      }));
+    });
+    return Promise.all(tasks).then(function(){
+      hunts.sort(function(a,b){ return (b.first||'').localeCompare(a.first||''); });
+      return { ok:true, hunts:hunts };
+    });
+  });
+};
+
+API.deleteHunt = function(data){
+  if (!data || String(data.pin||'') !== DELETE_PIN)
+    return Promise.resolve({ ok:false, error:'Wrong PIN.' });
+  var code = codeUp_(data.code);
+  // Soft-delete bucks, remove positions + hunt doc.
+  return bucksRef_(code).get().then(function(bs){
+    var batch = db.batch();
+    bs.forEach(function(d){ batch.update(d.ref, { deleted:true }); });
+    return batch.commit();
+  }).then(function(){
+    return posRef_(code).get();
+  }).then(function(ps){
+    var batch = db.batch();
+    ps.forEach(function(d){ batch.delete(d.ref); });
+    return batch.commit();
+  }).then(function(){
+    return huntRef_(code).delete();
+  }).then(function(){ return { ok:true }; })
+    .catch(function(e){ return { ok:false, error:String(e) }; });
+};
+
+// PDF + sheet URL: no server now. Build the PDF in the browser instead.
+API.getSheetUrl = function(){ return Promise.resolve({ ok:false, error:'No sheet in this version.' }); };
+API.huntPdf = function(code){
+  // Signal the UI to build the PDF client-side (handled by a patched downloadPdf).
+  return Promise.resolve({ ok:false, error:'__CLIENT_PDF__' });
+};
+
+// ============================================================
+//  Drop-in replacement for google.script.run
+//  Supports: .withSuccessHandler(fn).withFailureHandler(fn).someApiFn(args)
+// ============================================================
+function makeRunner(){
+  var onOk = null, onErr = null;
+  var runner = {
+    withSuccessHandler: function(fn){ onOk = fn; return runner; },
+    withFailureHandler: function(fn){ onErr = fn; return runner; }
+  };
+  Object.keys(API).forEach(function(name){
+    runner[name] = function(){
+      var args = Array.prototype.slice.call(arguments);
+      try {
+        API[name].apply(null, args).then(function(res){
+          if (onOk) onOk(res);
+        }).catch(function(err){
+          if (onErr) onErr(err); else console.error(err);
+        });
+      } catch (e) {
+        if (onErr) onErr(e); else console.error(e);
+      }
+      return runner;
+    };
+  });
+  return runner;
+}
+// Replace the Apps Script global with our Firestore-backed runner.
+var google = { script: { run: null } };
+Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner(); } });
+
+// ===== end data layer =====
+
+
+  // ====== CONFIG ======
+  // Paste your Google Maps JavaScript API key between the quotes.
+  // Leave it blank to use the coordinate-list fallback (no map, no billing).
+  var MAPS_API_KEY = 'AIzaSyDC2KlORWLWDdB6u-ff81F-bfN33YGRcyI';
+
+  var POLL_MS = 20000;   // how often the Everyone view refreshes (20s)
+
+  // ---------- state ----------
+  var state = { session:null, count:0, bucks:[], bearing:0, chair:null, chairSet:false,
+                name:'', code:'', huntName:'', view:'mine' };
+  var dialDragging = false;
+  var compassActive = false;
+  var saving = false;
+  var pollTimer = null;
+  var map = null, mapReady = false, mapMarkers = [], mapFitted = false;
+
+  // ---------- identity ----------
+  function loadIdentity(){
+    try{
+      state.name = localStorage.getItem('vjg_name') || '';
+      state.code = localStorage.getItem('vjg_code') || '';
+      state.huntName = localStorage.getItem('vjg_huntname') || '';
+    }catch(e){}
+  }
+  function saveIdentity(name, code){
+    state.name = name; state.code = code;
+    try{
+      localStorage.setItem('vjg_name', name);
+      localStorage.setItem('vjg_code', code);
+    }catch(e){}
+    renderWhoami();
+  }
+  function saveHuntName(huntName){
+    state.huntName = huntName || '';
+    try{ localStorage.setItem('vjg_huntname', state.huntName); }catch(e){}
+    renderWhoami();
+  }
+  function renderWhoami(){
+    document.getElementById('whoName').textContent = state.name || '—';
+    document.getElementById('whoCode').textContent = state.huntName || state.code || '—';
+  }
+
+  // Hide the Log button (and the End-hunt option) when the hunt is view-only.
+  function applyEndedState(ended){
+    state.ended = !!ended;
+    var lb = document.getElementById('logBtn');
+    if(lb) lb.style.display = ended ? 'none' : '';
+  }
+
+  // ---------- boot ----------
+  // iOS reads the home-screen icon from the OUTERMOST document. Apps Script
+  // serves us inside a sandbox iframe, so we try to add the icon link to the
+  // top window's <head> as well as our own. Wrapped in try/catch because
+  // cross-origin frames may block it.
+  function injectAppleIcon(){
+    var url = 'icon.png';
+    function addTo(doc){
+      try{
+        var l = doc.createElement('link');
+        l.rel = 'apple-touch-icon'; l.setAttribute('sizes','180x180'); l.href = url;
+        doc.getElementsByTagName('head')[0].appendChild(l);
+      }catch(e){}
+    }
+    try{ addTo(document); }catch(e){}
+    try{ if(window.top && window.top.document){ addTo(window.top.document); } }catch(e){}
+    try{ if(window.parent && window.parent.document){ addTo(window.parent.document); } }catch(e){}
+  }
+
+  window.addEventListener('load', function(){
+    injectAppleIcon();
+    drawDial();
+    loadIdentity();
+    renderWhoami();
+    renderAll();              // draw the radar grid + empty list right away
+    google.script.run
+      .withSuccessHandler(onSession)
+      .withFailureHandler(onFail)
+      .getSession(null);
+    locateChair();
+    if(!state.name || !state.code){ openSetup(); }
+    else {
+      // Returning user — check if their saved hunt has since been ended.
+      google.script.run.withSuccessHandler(function(res){
+        if(res && res.ok){ applyEndedState(res.status==='ended'); if(res.huntName) saveHuntName(res.huntName); }
+      }).getHuntName(state.code);
+    }
+
+    // Tap the dark area outside the popup to close it (only if a hunt exists).
+    document.getElementById('setupOverlay').addEventListener('click', function(e){
+      if(e.target === this){ closeSetupIfAllowed(); }
+    });
+
+    // ---- offline sync wiring ----
+    updatePendingBadge();
+    window.addEventListener('online', function(){ toast('Back online — syncing'); syncQueue(); });
+    // Periodic retry every 30s in case the 'online' event doesn't fire.
+    setInterval(function(){ if(navigator.onLine && (queueLen() || pendingPosition())){ syncQueue(); } }, 30000);
+    // Try once shortly after load, in case bucks/position were queued last time.
+    setTimeout(function(){ if(queueLen() || pendingPosition()) syncQueue(); }, 2500);
+
+    // ---- attempt offline-open caching (best effort) ----
+    tryRegisterSW();
+  });
+
+  function onSession(res){
+    if(!res || !res.ok){ onFail(res && res.error); return; }
+    if(!res.session){
+      // No session yet — make one automatically.
+      google.script.run.withSuccessHandler(onSession).withFailureHandler(onFail).startSession('');
+      return;
+    }
+    state.session = res.session;
+    var serverBucks = res.bucks || [];
+    // Keep any still-pending (unsynced) bucks on top of the server's list.
+    var pending = (state.bucks||[]).filter(function(b){ return b.pending; });
+    state.count = (res.count || 0) + pending.length;
+    state.bucks = serverBucks.concat(pending);
+    renderAll();
+    updatePendingBadge();
+  }
+
+  function onFail(err){
+    toast('Connection problem — check reception');
+    console.error(err);
+  }
+
+  // ---------- rendering ----------
+  function renderAll(){ renderHeader(); renderRadar(); renderList(); updateChairBanner(); }
+  function updateChairBanner(){
+    var b=document.getElementById('chairBanner');
+    if(b) b.style.display = (state.chairSet || state.ended) ? 'none' : '';
+  }
+
+  function renderHeader(){
+    document.getElementById('count').textContent = state.count;
+    var s = state.session ? state.session.replace('Jag ','') : 'New hunt';
+    document.getElementById('sessionLbl').textContent = s;
+  }
+
+  function polar(bearing, dist, maxDist, cx, cy, maxR){
+    var r = maxDist > 0 ? Math.min(dist / maxDist, 1) * maxR : 0.6 * maxR;
+    if(!dist) r = 0.62 * maxR;
+    var rad = (bearing - 90) * Math.PI / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  function renderRadar(){
+    var cx=160, cy=160, maxR=140;
+    var dists = state.bucks.map(function(b){ return Number(b.distance)||0; });
+    var maxDist = Math.max(100, Math.max.apply(null, dists.concat([0])));
+
+    var svg = '';
+    svg += ring(cx,cy,maxR) + ring(cx,cy,maxR*0.66) + ring(cx,cy,maxR*0.33);
+    svg += '<line class="raxis" x1="'+cx+'" y1="'+(cy-maxR)+'" x2="'+cx+'" y2="'+(cy+maxR)+'"/>';
+    svg += '<line class="raxis" x1="'+(cx-maxR)+'" y1="'+cy+'" x2="'+(cx+maxR)+'" y2="'+cy+'"/>';
+    svg += txt(cx, cy-maxR-6, 'N') + txt(cx+maxR+8, cy+4, 'E')
+         + txt(cx, cy+maxR+16, 'S') + txt(cx-maxR-8, cy+4, 'W');
+    // distance ring labels
+    svg += '<text class="rlbl" x="'+(cx+4)+'" y="'+(cy-maxR+12)+'">'+Math.round(maxDist)+'m</text>';
+
+    // you
+    svg += '<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="var(--you)" stroke="#fff" stroke-width="1"/>';
+
+    // bucks
+    state.bucks.forEach(function(b){
+      var p = polar(Number(b.bearing)||0, Number(b.distance)||0, maxDist, cx, cy, maxR);
+      svg += '<circle cx="'+p.x+'" cy="'+p.y+'" r="12" fill="var(--buck)"/>';
+      svg += '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" font-size="12" font-weight="700" fill="#06243f">'+b.number+'</text>';
+    });
+
+    document.getElementById('radar').innerHTML = svg;
+  }
+  function ring(cx,cy,r){ return '<circle class="rring" cx="'+cx+'" cy="'+cy+'" r="'+r+'"/>'; }
+  function txt(x,y,t){ return '<text class="rlbl" x="'+x+'" y="'+y+'" text-anchor="middle">'+t+'</text>'; }
+
+  function renderList(){
+    var el = document.getElementById('list');
+    if(!state.bucks.length){ el.innerHTML = '<div class="empty">No bucks logged yet.</div>'; return; }
+    var html = '';
+    // newest first
+    state.bucks.slice().reverse().forEach(function(b){
+      var dist = b.distance ? (b.distance+' m') : '—';
+      var dir  = compassName(Number(b.bearing)||0);
+      var t = (''+b.timestamp).split(' ')[1] || '';
+      t = t.substring(0,5);
+      var notes = b.notes ? ' · '+b.notes : '';
+      var meta = b.pending ? '⟳ waiting to sync' : (t+notes);
+      html += '<div class="item"'+(b.pending?' style="opacity:.7;"':'')+'>'
+            +   '<div class="badge">'+b.number+'</div>'
+            +   '<div class="meta">'
+            +     '<div class="metatop">'+Math.round(Number(b.bearing)||0)+'° '+dir+' · '+dist+'</div>'
+            +     '<div class="metabot">'+meta+'</div>'
+            +   '</div>'
+            + '</div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function compassName(deg){
+    var names=['N','NE','E','SE','S','SW','W','NW'];
+    return names[Math.round(deg/45)%8];
+  }
+
+  // ---------- dial ----------
+  function drawDial(){
+    var cx=150, cy=150, R=130;
+    var svg='';
+    svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="#13150f" stroke="#3a3f2c" stroke-width="2"/>';
+    // tick marks + cardinal letters
+    for(var d=0; d<360; d+=30){
+      var rad=(d-90)*Math.PI/180;
+      var r1=R-4, r2=R-16;
+      var x1=cx+r1*Math.cos(rad), y1=cy+r1*Math.sin(rad);
+      var x2=cx+r2*Math.cos(rad), y2=cy+r2*Math.sin(rad);
+      svg += '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#5a5f42" stroke-width="2"/>';
+    }
+    var card=[['N',0],['E',90],['S',180],['W',270]];
+    card.forEach(function(c){
+      var rad=(c[1]-90)*Math.PI/180, rr=R-34;
+      var x=cx+rr*Math.cos(rad), y=cy+rr*Math.sin(rad)+5;
+      svg += '<text x="'+x+'" y="'+y+'" text-anchor="middle" font-size="15" font-weight="700" fill="#a7a994">'+c[0]+'</text>';
+    });
+    svg += '<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="#a7a994"/>';
+    svg += '<line id="needle" x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-R+22)+'" stroke="#e0832f" stroke-width="5" stroke-linecap="round"/>';
+    svg += '<circle id="needledot" cx="'+cx+'" cy="'+(cy-R+22)+'" r="9" fill="#e0832f"/>';
+    var dial=document.getElementById('dial');
+    dial.innerHTML=svg;
+
+    dial.addEventListener('pointerdown', function(e){
+      if(!insideDial(e)) return;          // touch outside the circle: let the page scroll
+      dialDragging=true; setBearingFromEvent(e);
+    });
+    dial.addEventListener('pointermove', function(e){ if(dialDragging) setBearingFromEvent(e); });
+    window.addEventListener('pointerup', function(){ dialDragging=false; });
+  }
+
+  // Returns true only if the touch landed inside the compass circle (radius 130
+  // in the dial's 300x300 coordinate space). Corners outside the circle are
+  // ignored so they don't hijack the page scroll gesture.
+  function dialOffset(e){
+    var dial=document.getElementById('dial');
+    var rect=dial.getBoundingClientRect();
+    var scale=300/rect.width;
+    return {
+      px:(e.clientX-rect.left)*scale - 150,
+      py:(e.clientY-rect.top)*scale - 150
+    };
+  }
+  function insideDial(e){
+    var o=dialOffset(e);
+    return (o.px*o.px + o.py*o.py) <= (130*130);
+  }
+
+  function setBearingFromEvent(e){
+    var o=dialOffset(e);
+    var deg=Math.atan2(o.px, -o.py)*180/Math.PI;
+    if(deg<0) deg+=360;
+    setBearing(deg, false);
+    e.preventDefault();
+  }
+
+  function setBearing(deg, fromCompass){
+    deg=((deg%360)+360)%360;
+    state.bearing=deg;
+    var cx=150, cy=150, R=130, rad=(deg-90)*Math.PI/180;
+    var nx=cx+(R-22)*Math.cos(rad), ny=cy+(R-22)*Math.sin(rad);
+    var needle=document.getElementById('needle');
+    var dot=document.getElementById('needledot');
+    if(needle){ needle.setAttribute('x2',nx); needle.setAttribute('y2',ny); }
+    if(dot){ dot.setAttribute('cx',nx); dot.setAttribute('cy',ny); }
+    document.getElementById('bearingVal').textContent=Math.round(deg)+'° '+compassName(deg);
+    if(!fromCompass && compassActive) stopCompass();
+  }
+
+  // ---------- compass ----------
+  function useCompass(){
+    if(compassActive){ stopCompass(); return; }
+    if(typeof DeviceOrientationEvent === 'undefined'){
+      toast('No compass on this device — use the dial'); return;
+    }
+    if(typeof DeviceOrientationEvent.requestPermission === 'function'){
+      DeviceOrientationEvent.requestPermission().then(function(resp){
+        if(resp==='granted') startCompass(); else toast('Compass permission denied');
+      }).catch(function(){ toast('Compass not available'); });
+    } else {
+      startCompass();
+    }
+  }
+  function startCompass(){
+    compassActive=true;
+    document.getElementById('compassBtn').classList.add('live');
+    document.getElementById('compassBtn').textContent='● Compass live — tap to lock';
+    window.addEventListener('deviceorientation', onOrient, true);
+    window.addEventListener('deviceorientationabsolute', onOrient, true);
+  }
+  function stopCompass(){
+    compassActive=false;
+    window.removeEventListener('deviceorientation', onOrient, true);
+    window.removeEventListener('deviceorientationabsolute', onOrient, true);
+    var b=document.getElementById('compassBtn');
+    b.classList.remove('live'); b.textContent='⊕ Use phone compass';
+  }
+  function onOrient(e){
+    var heading=null;
+    // Phone held flat, screen up, TOP EDGE pointed at the animal.
+    if(typeof e.webkitCompassHeading === 'number'){
+      // iPhone: compass heading is the direction the top edge points. Correct as-is.
+      heading = e.webkitCompassHeading;
+    } else if(typeof e.alpha === 'number'){
+      // Android: alpha is rotation around the vertical axis. Held flat, the
+      // top-edge compass direction is (360 - alpha).
+      heading = (360 - e.alpha) % 360;
+    }
+    if(heading!==null){ setBearing(((heading%360)+360)%360, true); }
+  }
+
+  // ---------- GPS ----------
+  function locateChair(){
+    if(!navigator.geolocation){ gps('No GPS on device'); return; }
+    navigator.geolocation.getCurrentPosition(function(pos){
+      state.chair={ lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
+      gps('Chair GPS locked (±'+Math.round(pos.coords.accuracy)+' m)');
+    }, function(){ gps('GPS unavailable'); },
+    { enableHighAccuracy:true, timeout:10000, maximumAge:60000 });
+  }
+  function gps(msg){ var el=document.getElementById('gpsState'); if(el) el.textContent=msg; }
+
+  // Tell the server where I am, so the group map can show my chair.
+  function reportPosition(){
+    if(!state.chair || !state.name || !state.code) return;
+    google.script.run
+      .withFailureHandler(function(e){ console.error(e); })
+      .updatePosition({
+        code: state.code, hunter: state.name,
+        lat: state.chair.lat, lng: state.chair.lng, accuracy: state.chair.accuracy
+      });
+  }
+
+  // Set (or move) my chair: reads current GPS (works offline — satellites, not
+  // signal), marks chair set immediately, then sends now or queues to sync later.
+  function pingPosition(){
+    if(!state.name || !state.code){ openSetup(); return; }
+    if(!navigator.geolocation){ toast('No GPS on device'); return; }
+    toast('Getting your location…');
+    navigator.geolocation.getCurrentPosition(function(pos){
+      state.chair={ lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
+      state.chairSet = true;
+      updateChairBanner();
+      mapFitted=false;
+      renderAll();
+      if(state.view==='all') renderMap();   // show my chair on the map right away
+
+      // Remember the position so it syncs even with no signal.
+      queuePosition(state.chair);
+
+      if(navigator.onLine){
+        toast('Chair set ✓ — syncing');
+        syncPosition();
+      } else {
+        toast('Chair set offline ✓ — others will see it when you have signal');
+      }
+    }, function(){ toast('Could not get GPS — try again in the open'); },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+  }
+
+  // Latest chair position waiting to sync (only the newest matters).
+  var PKEY = 'vjg_pos';
+  function queuePosition(chair){
+    try{ localStorage.setItem(PKEY, JSON.stringify({
+      code: state.code, hunter: state.name,
+      lat: chair.lat, lng: chair.lng, accuracy: chair.accuracy
+    })); }catch(e){}
+    updatePendingBadge();
+  }
+  function pendingPosition(){
+    try{ var v=localStorage.getItem(PKEY); return v?JSON.parse(v):null; }catch(e){ return null; }
+  }
+  function syncPosition(){
+    var p = pendingPosition();
+    if(!p) return;
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(res && res.ok){
+          try{ localStorage.removeItem(PKEY); }catch(e){}
+          updatePendingBadge();
+          mapFitted=false;
+          if(state.view==='all') refreshGroup(false);
+        }
+      })
+      .withFailureHandler(function(){ /* stays queued */ })
+      .updatePosition(p);
+  }
+
+  // ---------- modal ----------
+  function openLog(){
+    if(!state.chairSet){
+      toast('First set your chair: open the "Active Hunt" tab and tap "⚲ Set my chair here"');
+      return;
+    }
+    setBearing(0,false);
+    document.getElementById('distance').value='';
+    document.getElementById('notes').value='';
+    document.getElementById('modalTitle').textContent='Log buck #'+(state.count+1);
+    document.getElementById('overlay').classList.add('show');
+    gps('Chair GPS locked (±'+Math.round(state.chair.accuracy)+' m)');
+  }
+  function closeLog(){
+    stopCompass();
+    document.getElementById('overlay').classList.remove('show');
+  }
+  function setDist(v){ document.getElementById('distance').value=v; }
+  function addNote(t){
+    var el=document.getElementById('notes');
+    el.value = el.value ? (el.value.replace(/\s*$/,'')+', '+t) : t;
+  }
+
+  // ---------- save ----------
+  // ---------- offline buck queue ----------
+  // Bucks are saved to a local queue first so logging always works, even with
+  // no signal. We try to upload right away; anything that fails stays queued
+  // and syncs later (on reconnect, on a timer, or via the Sync button).
+  var QKEY = 'vjg_queue';
+  function loadQueue(){
+    try{ return JSON.parse(localStorage.getItem(QKEY) || '[]'); }catch(e){ return []; }
+  }
+  function saveQueue(q){
+    try{ localStorage.setItem(QKEY, JSON.stringify(q)); }catch(e){}
+    updatePendingBadge();
+  }
+  function queueLen(){ return loadQueue().length; }
+
+  function updatePendingBadge(){
+    var n = queueLen();
+    var hasPos = !!pendingPosition();
+    var el = document.getElementById('pendingBadge');
+    if(el){
+      var parts = [];
+      if(n) parts.push(n + ' buck' + (n===1?'':'s'));
+      if(hasPos) parts.push('chair position');
+      el.style.display = (n||hasPos) ? '' : 'none';
+      el.textContent = parts.join(' + ') + ' waiting to sync ⟳';
+    }
+    var b = document.getElementById('syncBtn');
+    if(b) b.style.display = (n||hasPos) ? '' : 'none';
+  }
+
+  function saveBuck(){
+    if(saving) return;
+    try{
+    saving=true;
+    document.getElementById('saveBtn').textContent='Saving…';
+
+    var item={
+      id: 'q'+Date.now()+'_'+Math.floor(Math.random()*1000),
+      session: state.session || ('Hunt ' + (state.code||'')),
+      bearing: Math.round(state.bearing),
+      distance: document.getElementById('distance').value,
+      notes: document.getElementById('notes').value,
+      lat: state.chair ? state.chair.lat : '',
+      lng: state.chair ? state.chair.lng : '',
+      accuracy: state.chair ? state.chair.accuracy : '',
+      hunter: state.name,
+      code: state.code,
+      ts: Date.now()
+    };
+
+    // Always queue first so nothing is ever lost.
+    var q = loadQueue(); q.push(item); saveQueue(q);
+
+    // Show it on my radar immediately (optimistic), marked pending.
+    state.count = (state.count||0) + 1;
+    state.bucks.push({
+      number: state.count, bearing: item.bearing, distance: item.distance,
+      notes: item.notes, timestamp: '', pending: true, qid: item.id
+    });
+    renderAll();
+    closeLog();
+
+    saving=false;
+    document.getElementById('saveBtn').textContent='Save buck';
+
+    if(navigator.onLine){
+      toast('Buck #'+state.count+' saved — syncing…');
+      syncQueue();
+    } else {
+      toast('Buck #'+state.count+' saved offline — will sync when you have signal');
+    }
+    }catch(err){
+      saving=false;
+      document.getElementById('saveBtn').textContent='Save buck';
+      toast('Save error: '+(err && err.message ? err.message : err));
+      console.error('saveBuck error', err);
+    }
+  }
+
+  // Best-effort: register a service worker (built from a Blob, so no separate
+  // file is needed) that caches visited pages so the app can open with no
+  // signal. On Apps Script's sandbox this may be blocked — if so, we fail
+  // silently and the "open it before you lose signal" approach still works.
+  function tryRegisterSW(){
+    try{
+      if(!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.register('sw.js').then(function(){
+        console.log('SW registered — offline-open enabled');
+      }).catch(function(err){ console.log('SW failed:', err); });
+    }catch(e){}
+  }
+
+  var syncing=false;
+  function syncQueue(manual){
+    // Always try to flush a pending chair position too.
+    if(pendingPosition()){ syncPosition(); }
+    var q = loadQueue();
+    if(!q.length){ if(manual && !pendingPosition()) toast('Nothing to sync'); else if(manual) toast('Syncing position…'); return; }
+    if(syncing) return;
+    if(!navigator.onLine && !manual){ return; }
+    syncing=true;
+    if(manual) toast('Syncing '+q.length+'…');
+    sendNext(q, 0, 0);
+  }
+  function sendNext(q, idx, okCount){
+    if(idx >= q.length){
+      finishSync(okCount);
+      return;
+    }
+    var item = q[idx];
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(res && res.ok){
+          // Remove this item from the stored queue by id.
+          var cur = loadQueue();
+          cur = cur.filter(function(x){ return x.id !== item.id; });
+          saveQueue(cur);
+          // Mark the matching optimistic buck as synced.
+          for(var i=0;i<state.bucks.length;i++){
+            if(state.bucks[i].qid === item.id){ state.bucks[i].pending=false; }
+          }
+          sendNext(q, idx+1, okCount+1);
+        } else {
+          // Server rejected (e.g. hunt ended). Drop it so it doesn't loop forever.
+          var cur2 = loadQueue();
+          cur2 = cur2.filter(function(x){ return x.id !== item.id; });
+          saveQueue(cur2);
+          sendNext(q, idx+1, okCount);
+        }
+      })
+      .withFailureHandler(function(){
+        // Network failed — stop, keep the rest queued for next time.
+        finishSync(okCount);
+      })
+      .saveBuck(item);
+  }
+  function finishSync(okCount){
+    syncing=false;
+    var left = queueLen();
+    if(okCount>0){
+      toast(okCount+' synced'+(left?(', '+left+' still waiting'):''));
+      // Refresh from server so numbers/positions are authoritative.
+      google.script.run.withSuccessHandler(onSession).withFailureHandler(function(){}).getSession(null);
+      if(state.view==='all') refreshGroup(false);
+    } else if(left){
+      toast('Still no signal — '+left+' waiting');
+    }
+    updatePendingBadge();
+  }
+
+  // ---------- setup modal (choose / start / join) ----------
+  var pendingJoinCode = null, pendingHuntName = '';
+
+  function openSetup(){
+    showStage('choose');
+    document.getElementById('setupOverlay').classList.add('show');
+  }
+  function showStage(which){
+    ['Choose','Start','Join','Created'].forEach(function(s){
+      document.getElementById('stage'+s).style.display =
+        (s.toLowerCase()===which) ? '' : 'none';
+    });
+    if(which==='choose'){
+      // Only let them back out if they already have a hunt to return to.
+      var canClose = !!(state.name && state.code);
+      document.getElementById('keepHuntBtn').style.display = canClose ? '' : 'none';
+    }
+    if(which==='start'){
+      document.getElementById('startOrganizer').value = state.name || '';
+    }
+    if(which==='join'){
+      document.getElementById('joinName').value = state.name || '';
+    }
+  }
+
+  // Close the setup popup, but only if a hunt is already set up (so a brand-new
+  // user can't dismiss it and end up with no hunt).
+  function closeSetupIfAllowed(){
+    if(state.name && state.code){
+      document.getElementById('setupOverlay').classList.remove('show');
+    } else {
+      toast('Start or join a hunt first');
+    }
+  }
+
+  function doCreateHunt(){
+    var secret = document.getElementById('startSecret').value;
+    var huntName = document.getElementById('startHuntName').value.trim();
+    var organizer = document.getElementById('startOrganizer').value.trim();
+    if(!secret){ toast('Enter your organizer code'); return; }
+    if(!huntName){ toast('Enter a hunt name'); return; }
+    if(!organizer){ toast('Enter your name'); return; }
+    toast('Creating hunt…');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res || !res.ok){ toast(res&&res.error?res.error:'Could not create hunt'); return; }
+        // Save identity: the join code becomes our active hunt code.
+        pendingJoinCode = res.joinCode;
+        pendingHuntName = res.huntName;
+        saveIdentity(organizer, res.joinCode);
+        saveHuntName(res.huntName);
+        document.getElementById('createdName').textContent = res.huntName;
+        document.getElementById('createdCode').textContent = res.joinCode;
+        showStage('created');
+      })
+      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+      .createHunt({ secret: secret, huntName: huntName, organizer: organizer });
+  }
+
+  function doJoinHunt(){
+    var code = document.getElementById('joinCode').value.toUpperCase().trim();
+    var name = document.getElementById('joinName').value.trim();
+    if(!code){ toast('Enter the join code'); return; }
+    if(!name){ toast('Enter your name'); return; }
+    toast('Joining…');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res || !res.ok){ toast(res&&res.error?res.error:'Could not join'); return; }
+        saveIdentity(name, res.joinCode);
+        saveHuntName(res.huntName);
+        applyEndedState(res.status === 'ended');
+        finishSetup();
+        if(res.status==='ended'){ setView('all'); openSummary(res.joinCode); toast('This hunt has ended — view only'); }
+        else { toast('Joined: '+res.huntName); }
+      })
+      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+      .joinHunt({ joinCode: code });
+  }
+
+  function copyJoinCode(){
+    var code = document.getElementById('createdCode').textContent;
+    if(navigator.clipboard){ navigator.clipboard.writeText(code); }
+    toast('Copied '+code);
+  }
+
+  function finishSetup(){
+    document.getElementById('setupOverlay').classList.remove('show');
+    if(state.view==='all') refreshGroup(true);
+    if(!state.chairSet && !state.ended){
+      setTimeout(function(){ toast('When you reach your spot, open "Active Hunt" and tap "Set my chair here"'); }, 600);
+    }
+  }
+
+  // ---------- view toggle ----------
+  function scrollTop(){
+    try{
+      window.scrollTo(0,0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }catch(e){}
+  }
+  function setView(v){
+    state.view = v;
+    scrollTop();
+    document.getElementById('viewMine').style.display = (v==='mine') ? '' : 'none';
+    document.getElementById('viewAll').style.display  = (v==='all')  ? '' : 'none';
+    document.getElementById('tabMine').classList.toggle('active', v==='mine');
+    document.getElementById('tabAll').classList.toggle('active', v==='all');
+    if(v==='all'){
+      ensureMap();
+      // Don't auto-refresh/poll when we're about to load a PAST hunt
+      // (viewHunt sets viewingPastCode just before calling setView).
+      if(!viewingPastCode){
+        refreshGroup(true);
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    } else {
+      // Leaving the Everyone view returns us to the live current hunt.
+      viewingPastCode = null;
+      stopPolling();
+    }
+    setTimeout(scrollTop, 60);   // again after content height settles
+  }
+  function startPolling(){
+    stopPolling();
+    pollTimer = setInterval(function(){ refreshGroup(false); }, POLL_MS);
+  }
+  function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
+
+  // Tapping the Everyone tab while viewing a past hunt should snap back to
+  // the live current hunt. The tab calls setLiveView() via its onclick below.
+  function setLiveView(){ viewingPastCode = null; setView('all'); }
+
+  // ---------- group data ----------
+  var lastGroup = { hunters:[], bucks:[] };
+  var whoFilter = 'all';     // 'all' = everyone, 'me' = only me
+  var showBucks = true;      // manual bucks/hunters toggle
+  var BUCK_ZOOM = 15;        // at/above this zoom, bucks may show; below, hidden
+
+  function onToggleEveryone(){
+    whoFilter = document.getElementById('swEveryone').checked ? 'all' : 'me';
+    renderGroup();
+  }
+  function onToggleBucks(){
+    showBucks = document.getElementById('swBucks').checked;
+    renderGroup();
+  }
+  // Bucks show purely based on the switch now (no zoom auto-hide).
+  function bucksVisible(){
+    return showBucks;
+  }
+  // Does this row belong to me (for the who-filter)?
+  function isMine(name){
+    return state.name && (name||'').toLowerCase()===state.name.toLowerCase();
+  }
+  function refreshGroup(showToast){
+    if(!state.code){ openSetup(); return; }
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res || !res.ok){ if(showToast) toast('Could not load group'); return; }
+        lastGroup = { hunters: res.hunters||[], bucks: res.bucks||[] };
+        renderGroup();
+        if(showToast) toast('Updated');
+      })
+      .withFailureHandler(function(e){ if(showToast) toast('Check reception'); console.error(e); })
+      .getGroup(state.code);
+  }
+
+  // Stable color per hunter name
+  var HUNTER_COLORS = ['#e0832f','#4f9bdd','#5dca7a','#d6543f','#b07cd6','#d8b13a','#46b3a8','#dd6fa0'];
+  function colorFor(name){
+    var h=0; name=(name||'');
+    for(var i=0;i<name.length;i++){ h=(h*31+name.charCodeAt(i))>>>0; }
+    return HUNTER_COLORS[h % HUNTER_COLORS.length];
+  }
+
+  function renderGroup(){
+    document.getElementById('hunterCount').textContent = lastGroup.hunters.length;
+    var total = lastGroup.bucks.length;
+    var done = lastGroup.bucks.filter(function(b){ return b.collected; }).length;
+    document.getElementById('groupBuckCount').textContent = done ? (done+'/'+total) : total;
+    renderGroupList();
+    renderMap();
+  }
+
+  function renderGroupList(){
+    var el = document.getElementById('groupList');
+    var rows = [];
+
+    lastGroup.hunters.forEach(function(h){
+      if(whoFilter==='me' && !isMine(h.hunter)) return;
+      var c = colorFor(h.hunter);
+      var t = (''+h.updated).split(' ')[1] || '';
+      rows.push('<div class="item">'
+        + '<div class="badge" style="background:'+c+';color:#fff;"><i style="font-style:normal">●</i></div>'
+        + '<div class="meta"><div class="metatop">'+esc(h.hunter)+' · chair</div>'
+        + '<div class="metabot">seen '+t.substring(0,5)+'</div></div>'
+        + '</div>');
+    });
+
+    if(showBucks){
+    lastGroup.bucks.slice().reverse().forEach(function(b){
+      if(whoFilter==='me' && !isMine(b.hunter)) return;
+      var c = colorFor(b.hunter);
+      var dist = b.distance ? (b.distance+' m') : '—';
+      var notes = b.notes ? ' · '+esc(b.notes) : '';
+      var coords = (b.buckLat!=='' && b.buckLng!=='')
+        ? '<button class="copybtn" onclick="navigateTo('+b.buckLat+','+b.buckLng+')">▶ Go</button>' : '';
+      var tick = '<button class="tickbtn'+(b.collected?' done':'')+'" '
+        + 'onclick="toggleCollected('+b.row+','+(b.collected?'false':'true')+')">'
+        + (b.collected?'✓':'○')+'</button>';
+      // Edit/delete only on MY own bucks, and only in the live (not past/ended) hunt.
+      var mine = !viewingPastCode && state.name &&
+                 (b.hunter||'').toLowerCase() === state.name.toLowerCase();
+      var editbtns = mine
+        ? '<button class="copybtn" onclick="openEditBuck('+b.row+')">Edit</button>'
+        : '';
+      rows.push('<div class="item'+(b.collected?' collected':'')+'">'
+        + '<div class="badge" style="background:'+c+';color:#fff;">'+b.number+'</div>'
+        + '<div class="meta"><div class="metatop">'+esc(b.hunter)+' · buck #'+b.number+' · '+dist+'</div>'
+        + '<div class="metabot">'+Math.round(Number(b.bearing)||0)+'°'+notes+'</div></div>'
+        + coords + editbtns + tick
+        + '</div>');
+    });
+    }
+
+    el.innerHTML = rows.length ? rows.join('') :
+      '<div class="empty">No one has reported in yet on this code.</div>';
+  }
+
+  function copyCoords(lat,lng){
+    var s = lat+','+lng;
+    if(navigator.clipboard){ navigator.clipboard.writeText(s); }
+    toast('Copied '+s);
+  }
+
+  // One-tap navigate: opens Google Maps driving directions from the loader's
+  // current location to the buck. Phone picks the start point automatically.
+  function navigateTo(lat,lng){
+    var url = 'https://www.google.com/maps/dir/?api=1&destination=' +
+              lat + ',' + lng + '&travelmode=driving';
+    window.open(url, '_blank');
+  }
+
+  // Loader ticks a buck off as collected. Update the screen immediately,
+  // then save to the server; revert if the save fails.
+  function toggleCollected(row, makeCollected){
+    var b = null;
+    for(var i=0;i<lastGroup.bucks.length;i++){ if(lastGroup.bucks[i].row===row){ b=lastGroup.bucks[i]; break; } }
+    if(!b) return;
+    b.collected = makeCollected;
+    renderGroup();
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res || !res.ok){ b.collected = !makeCollected; renderGroup(); toast(res&&res.error?res.error:'Could not update'); }
+      })
+      .withFailureHandler(function(e){ b.collected = !makeCollected; renderGroup(); toast('Check reception'); console.error(e); })
+      .setCollected({ row: row, code: state.code, collected: makeCollected });
+  }
+
+  // ---------- edit / delete buck ----------
+  var editRow = null;
+  function findBuckRow(row){
+    for(var i=0;i<lastGroup.bucks.length;i++){ if(lastGroup.bucks[i].row===row) return lastGroup.bucks[i]; }
+    return null;
+  }
+  function openEditBuck(row){
+    var b = findBuckRow(row); if(!b) return;
+    editRow = row;
+    document.getElementById('editBearing').value = Math.round(Number(b.bearing)||0);
+    document.getElementById('editDistance').value = b.distance || '';
+    document.getElementById('editNotes').value = b.notes || '';
+    document.getElementById('editOverlay').classList.add('show');
+  }
+  function closeEditBuck(){ document.getElementById('editOverlay').classList.remove('show'); editRow=null; }
+
+  function saveEditBuck(){
+    if(editRow===null) return;
+    toast('Saving…');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not save'); return; }
+        closeEditBuck(); refreshGroup(false); toast('Buck updated');
+      })
+      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+      .editBuck({
+        row: editRow, code: state.code, hunter: state.name,
+        bearing: document.getElementById('editBearing').value,
+        distance: document.getElementById('editDistance').value,
+        notes: document.getElementById('editNotes').value
+      });
+  }
+
+  function deleteThisBuck(){
+    if(editRow===null) return;
+    if(!confirm('Delete this buck? It will be removed from the map and counts.')) return;
+    toast('Deleting…');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not delete'); return; }
+        closeEditBuck(); refreshGroup(false); toast('Buck deleted');
+      })
+      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+      .deleteBuck({ row: editRow, code: state.code, hunter: state.name });
+  }
+
+  function esc(s){
+    s = '' + s;
+    s = s.split('&').join('&amp;');
+    s = s.split('\u003C').join('&lt;');
+    s = s.split('\u003E').join('&gt;');
+    s = s.split('"').join('&quot;');
+    return s;
+  }
+
+  // ---------- map ----------
+  function ensureMap(){
+    var msg = document.getElementById('mapMsg');
+    if(mapReady) return;
+    if(!MAPS_API_KEY){
+      msg.textContent = 'No map key set — showing the coordinate list below. (Add a Maps API key in the code to enable the map.)';
+      return;
+    }
+    if(typeof google === 'undefined' || !google.maps || !google.maps.Map){
+      loadMapsApi();
+      return;
+    }
+    initMap();
+  }
+
+  function loadMapsApi(){
+    if(window.__vjMapsLoading) return;
+    window.__vjMapsLoading = true;
+    // Plain, sandbox-safe loader: a classic script tag with a global callback.
+    // The old minified Google loader used modern syntax the Apps Script HTML
+    // sandbox cannot parse, which broke page assembly. This avoids all of that.
+    window.__vjMapsReady = function(){ initMap(); };
+    var s = document.createElement('script');
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' +
+            encodeURIComponent(MAPS_API_KEY) +
+            '&v=weekly&callback=__vjMapsReady';
+    s.async = true;
+    s.onerror = function(){
+      document.getElementById('mapMsg').textContent =
+        'Map could not load — using the coordinate list below.';
+    };
+    document.head.appendChild(s);
+  }
+
+  function initMap(){
+    try{
+      var msg = document.getElementById('mapMsg');
+      var center = mapCenter();
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: center, zoom: 15, mapTypeId: 'hybrid',
+        disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy'
+      });
+      mapReady = true;
+      msg.classList.add('hide');
+      renderMap();
+    }catch(err){
+      document.getElementById('mapMsg').textContent =
+        'Map could not load — using the coordinate list below.';
+      console.error(err);
+    }
+  }
+
+  function mapCenter(){
+    var pts = [];
+    lastGroup.hunters.forEach(function(h){ if(h.lat!=='') pts.push([h.lat,h.lng]); });
+    lastGroup.bucks.forEach(function(b){ if(b.buckLat!=='') pts.push([b.buckLat,b.buckLng]); });
+    if(state.chair) pts.push([state.chair.lat,state.chair.lng]);
+    if(!pts.length) return { lat:-28.0, lng:24.0 };
+    var la=0,ln=0; pts.forEach(function(p){ la+=Number(p[0]); ln+=Number(p[1]); });
+    return { lat: la/pts.length, lng: ln/pts.length };
+  }
+
+  function clearMarkers(){
+    for(var i=0;i<mapMarkers.length;i++){
+      try{ mapMarkers[i].setMap(null); }catch(e){}
+      try{ mapMarkers[i].map = null; }catch(e){}
+    }
+    mapMarkers = [];
+  }
+
+  function renderMap(){
+    if(!mapReady || !map) return;
+    clearMarkers();
+    var bounds = new google.maps.LatLngBounds();
+    var any = false;
+
+    // Track which hunter names the server already has a position for, so we
+    // don't double-draw ourselves once our ping comes back.
+    var shownNames = {};
+
+    lastGroup.hunters.forEach(function(h){
+      if(h.lat===''||h.lng==='') return;
+      if(whoFilter==='me' && !isMine(h.hunter)) return;
+      var pos = { lat:Number(h.lat), lng:Number(h.lng) };
+      shownNames[(h.hunter||'').toLowerCase()] = true;
+      mapMarkers.push(new google.maps.Marker({
+        map: map, position: pos, title: h.hunter+' (chair)',
+        label: { text: '\u25C6', color: '#fff', fontSize: '14px' },
+        icon: dotIcon(colorFor(h.hunter), 13)
+      }));
+      addNameTag(pos, h.hunter);
+      bounds.extend(pos); any = true;
+    });
+
+    // Always show my own current chair from local GPS — works even solo and
+    // even before my position has round-tripped through the server.
+    if(state.chair && state.name && !shownNames[state.name.toLowerCase()]){
+      var me = { lat:Number(state.chair.lat), lng:Number(state.chair.lng) };
+      mapMarkers.push(new google.maps.Marker({
+        map: map, position: me, title: state.name+' (you)',
+        label: { text: '\u25C6', color: '#fff', fontSize: '14px' },
+        icon: dotIcon(colorFor(state.name), 13)
+      }));
+      addNameTag(me, state.name);
+      bounds.extend(me); any = true;
+    }
+
+    if(bucksVisible()){
+    lastGroup.bucks.forEach(function(b){
+      if(b.buckLat===''||b.buckLng==='') return;
+      if(whoFilter==='me' && !isMine(b.hunter)) return;
+      var pos = { lat:Number(b.buckLat), lng:Number(b.buckLng) };
+      mapMarkers.push(new google.maps.Marker({
+        map: map, position: pos,
+        title: b.hunter+' buck #'+b.number+' ('+(b.distance||'?')+'m)'+(b.collected?' — collected':''),
+        label: { text: String(b.collected?'\u2713':b.number), color:'#fff', fontSize:'13px', fontWeight:'700' },
+        icon: dotIcon(b.collected ? '#5dca7a' : colorFor(b.hunter), 14)
+      }));
+      bounds.extend(pos); any = true;
+    });
+    }
+
+    if(any && !bounds.isEmpty() && !mapFitted){ map.fitBounds(bounds, 60); mapFitted = true; }
+  }
+
+  // A simple colored circle marker icon (no external image, no AdvancedMarker).
+  function dotIcon(color, r){
+    return {
+      path: google.maps.SymbolPath.CIRCLE,
+      fillColor: color, fillOpacity: 1,
+      strokeColor: '#fff', strokeWeight: 2,
+      scale: r
+    };
+  }
+
+  // Drops a transparent marker at the same spot whose only purpose is to show
+  // the hunter's name as a readable label just below their chair dot.
+  function addNameTag(pos, name){
+    if(!name) return;
+    mapMarkers.push(new google.maps.Marker({
+      map: map, position: pos,
+      // Fully transparent 1x1 icon, anchored so the label sits below the dot.
+      icon: {
+        path: 'M 0,0 0,0',
+        strokeOpacity: 0, fillOpacity: 0, scale: 1,
+        labelOrigin: new google.maps.Point(0, 22)
+      },
+      label: {
+        text: name,
+        color: '#ffffff',
+        fontSize: '12px',
+        fontWeight: '700',
+        className: 'maplabel'
+      },
+      clickable: false, zIndex: 1
+    }));
+  }
+
+  // ---------- sessions ----------
+  // ---------- hunt history ----------
+  var viewingPastCode = null;   // non-null when viewing a past hunt
+
+  function openHistory(){
+    document.getElementById('historyOverlay').classList.add('show');
+    document.getElementById('historyList').innerHTML = '<div class="empty">Loading…</div>';
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res || !res.ok){ document.getElementById('historyList').innerHTML = '<div class="empty">Could not load history.</div>'; return; }
+        renderHistory(res.hunts || []);
+      })
+      .withFailureHandler(function(e){ document.getElementById('historyList').innerHTML = '<div class="empty">Check reception.</div>'; console.error(e); })
+      .listHunts();
+  }
+  function closeHistory(){ document.getElementById('historyOverlay').classList.remove('show'); }
+
+  function renderHistory(hunts){
+    var el = document.getElementById('historyList');
+    if(!hunts.length){ el.innerHTML = '<div class="empty">No hunts logged yet.</div>'; return; }
+    var rows = [];
+    hunts.forEach(function(hu){
+      var day = (''+hu.first).split(' ')[0] || '';
+      var current = (hu.code === state.code) ? ' · current' : '';
+      rows.push('<div class="item">'
+        + '<div class="badge" style="background:var(--accent);color:#fff;cursor:pointer;" onclick="viewHunt(\''+esc(hu.code)+'\')">'+hu.count+'</div>'
+        + '<div class="meta" style="cursor:pointer;" onclick="viewHunt(\''+esc(hu.code)+'\')"><div class="metatop">'+esc(hu.code)+current+'</div>'
+        + '<div class="metabot">'+day+' · '+esc(hu.hunters||'')+'</div></div>'
+        + '<button class="copybtn" style="background:#5a1f1f;color:#fff;" onclick="deleteHuntPrompt(\''+esc(hu.code)+'\')">Delete</button>'
+        + '</div>');
+    });
+    el.innerHTML = rows.join('');
+  }
+
+  function deleteHuntPrompt(code){
+    var pin = prompt('Enter PIN to delete hunt "'+code+'". This removes it from history.');
+    if(pin===null) return;
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not delete'); return; }
+        toast('Hunt deleted');
+        openHistory();
+      })
+      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+      .deleteHunt({ code: code, pin: pin });
+  }
+
+  // View a past hunt: load its data into the Everyone view without changing
+  // the hunter's real current code (so they can return to today's hunt).
+  function viewHunt(code){
+    closeHistory();
+    viewingPastCode = code;
+    setView('all');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res || !res.ok){ toast('Could not load that hunt'); return; }
+        lastGroup = { hunters: res.hunters||[], bucks: res.bucks||[] };
+        renderGroup();
+        toast('Viewing hunt: '+code);
+      })
+      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+      .getGroup(code);
+  }
+
+  function openSheet(){
+    google.script.run.withSuccessHandler(function(res){
+      if(res && res.ok && res.url){ window.open(res.url, '_blank'); }
+      else toast('Could not open log');
+    }).getSheetUrl();
+  }
+
+  // ---------- end hunt ----------
+  function openEndHunt(){
+    if(!state.code){ toast('No active hunt'); return; }
+    document.getElementById('endSecret').value='';
+    document.getElementById('endOverlay').classList.add('show');
+  }
+  function closeEndHunt(){ document.getElementById('endOverlay').classList.remove('show'); }
+  function doEndHunt(){
+    var secret=document.getElementById('endSecret').value;
+    if(!secret){ toast('Enter your organizer code'); return; }
+    toast('Ending hunt…');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not end hunt'); return; }
+        var endedCode = state.code;
+        closeEndHunt();
+        // Log out of the ended hunt entirely — clear identity, stop polling,
+        // and drop to the home (choose) screen. The hunt is now view-only.
+        stopPolling();
+        try{ localStorage.removeItem('vjg_code'); localStorage.removeItem('vjg_huntname'); }catch(e){}
+        state.code=''; state.huntName=''; state.session=null;
+        state.count=0; state.bucks=[]; lastGroup={hunters:[],bucks:[]};
+        renderWhoami(); renderAll();
+        toast('Hunt ended');
+        openSummary(endedCode);   // show final summary; closing it lands on home
+      })
+      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+      .endHunt({ joinCode: state.code, secret: secret });
+  }
+
+  // ---------- summary ----------
+  var summaryCode = null;
+  function openSummary(code){
+    if(!code){ toast('No hunt selected'); return; }
+    summaryCode = code;
+    document.getElementById('sumStatus').textContent='Loading…';
+    document.getElementById('sumCards').innerHTML='';
+    document.getElementById('sumHunters').innerHTML='';
+    document.getElementById('summaryOverlay').classList.add('show');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res||!res.ok){ document.getElementById('sumStatus').textContent='Could not load.'; return; }
+        renderSummary(res);
+      })
+      .withFailureHandler(function(e){ document.getElementById('sumStatus').textContent='Check reception.'; console.error(e); })
+      .huntSummary(code);
+  }
+  function closeSummary(){
+    document.getElementById('summaryOverlay').classList.remove('show');
+    if(!state.code){ openSetup(); }   // no active hunt → back to home
+  }
+
+  function renderSummary(s){
+    document.getElementById('sumTitle').textContent = s.huntName || 'Hunt summary';
+    document.getElementById('sumStatus').textContent = (s.status==='ended') ? ('Ended '+(s.ended||'')) : 'In progress';
+
+    function card(label,val,big){
+      var num = big ? 38 : 24;
+      return '<div style="flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:'+(big?'16px':'10px')+';text-align:center;">'
+        + '<div style="font-size:'+num+'px;font-weight:700;color:var(--accent2);line-height:1;">'+val+'</div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-top:4px;">'+label+'</div></div>';
+    }
+    var ch = '<div style="margin-bottom:8px;">'+card('Total bucks',s.total,true)+'</div>'
+           + '<div style="display:flex;gap:8px;margin-bottom:8px;">'+card('Male',s.male)+card('Female',s.female)+'</div>'
+           + '<div style="display:flex;gap:8px;">'+card('Head',s.head)+card('Body',s.body)+'</div>';
+    document.getElementById('sumCards').innerHTML = ch;
+
+    var rows='';
+    (s.hunters||[]).forEach(function(h){
+      var st=h.stats;
+      rows += '<div class="item"><div class="meta">'
+            + '<div class="metatop">'+esc(h.hunter)+' · '+st.total+' bucks</div>'
+            + '<div class="metabot">M '+st.male+' · F '+st.female+' · head '+st.head+' · body '+st.body+'</div>'
+            + '</div></div>';
+    });
+    document.getElementById('sumHunters').innerHTML = rows || '<div class="empty">No bucks logged.</div>';
+  }
+
+  function downloadPdf(){
+    if(!summaryCode){ return; }
+    toast('Building report…');
+    API.huntSummary(summaryCode).then(function(s){
+      if(!s || !s.ok){ toast('Could not build report'); return; }
+      var rows='';
+      (s.hunters||[]).forEach(function(h){
+        var st=h.stats;
+        rows += '<tr><td>'+esc(h.hunter)+'</td><td class="n">'+st.total+'</td><td class="n">'+st.male
+              + '</td><td class="n">'+st.female+'</td><td class="n">'+st.head+'</td><td class="n">'+st.body+'</td></tr>';
+      });
+      if(!rows) rows='<tr><td colspan="6" style="text-align:center;color:#888;">No bucks logged</td></tr>';
+      var html='<html><head><meta charset="utf-8"><title>'+esc(s.huntName)+'</title><style>'
+        + 'body{font-family:Helvetica,Arial,sans-serif;color:#222;margin:32px;}'
+        + 'h1{font-size:24px;margin:0 0 4px;color:#b35a18;}'
+        + '.sub{color:#666;font-size:13px;margin-bottom:22px;}'
+        + '.cards{display:flex;gap:10px;margin-bottom:22px;}'
+        + '.card{flex:1;border:1px solid #ddd;border-radius:10px;padding:12px;text-align:center;}'
+        + '.card .v{font-size:26px;font-weight:bold;color:#b35a18;}'
+        + '.card .l{font-size:11px;color:#666;text-transform:uppercase;}'
+        + 'table{width:100%;border-collapse:collapse;font-size:14px;}'
+        + 'th,td{border-bottom:1px solid #e5e5e5;padding:9px 8px;text-align:left;}'
+        + 'th{background:#f5f1e8;font-size:12px;text-transform:uppercase;color:#555;}'
+        + 'td.n,th.n{text-align:center;}'
+        + '.foot{margin-top:24px;font-size:11px;color:#999;}'
+        + '@media print{.noprint{display:none;}}'
+        + '</style></head><body>'
+        + '<h1>'+esc(s.huntName)+'</h1>'
+        + '<div class="sub">Bok Log &middot; '+(s.ended?('Ended '+esc(s.ended)):'Hunt report')+'</div>'
+        + '<div class="cards">'
+        + '<div class="card"><div class="v">'+s.total+'</div><div class="l">Total</div></div>'
+        + '<div class="card"><div class="v">'+s.male+'</div><div class="l">Male</div></div>'
+        + '<div class="card"><div class="v">'+s.female+'</div><div class="l">Female</div></div>'
+        + '<div class="card"><div class="v">'+s.head+'</div><div class="l">Head</div></div>'
+        + '<div class="card"><div class="v">'+s.body+'</div><div class="l">Body</div></div>'
+        + '</div>'
+        + '<table><thead><tr><th>Hunter</th><th class="n">Bucks</th><th class="n">Male</th>'
+        + '<th class="n">Female</th><th class="n">Head</th><th class="n">Body</th></tr></thead>'
+        + '<tbody>'+rows+'</tbody></table>'
+        + '<div class="foot">Counts come from notes logged with each buck.</div>'
+        + '<div class="noprint" style="margin-top:24px;"><button onclick="window.print()" '
+        + 'style="padding:12px 20px;font-size:16px;background:#c1631d;color:#fff;border:none;border-radius:8px;">'
+        + 'Save as PDF / Print</button></div>'
+        + '</body></html>';
+      var w = window.open('', '_blank');
+      if(!w){ toast('Allow pop-ups to download the report'); return; }
+      w.document.open(); w.document.write(html); w.document.close();
+      toast('Tap "Save as PDF" in the new tab');
+    }).catch(function(e){ toast('Could not build report'); console.error(e); });
+  }
+
+  // ---------- toast ----------
+  var toastTimer=null;
+  function toast(msg){
+    var t=document.getElementById('toast');
+    t.textContent=msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){ t.classList.remove('show'); }, 2600);
+  }
+
+</script>
+
+</body>
+</html>
