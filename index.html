@@ -11,8 +11,8 @@
 <meta name="theme-color" content="#13150f">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/agdutoit-oss/bok-log/main/f9fb6f67-c9f3-45f9-b0aa-aa6a37310c88.png">
-<link rel="icon" href="https://raw.githubusercontent.com/agdutoit-oss/bok-log/main/f9fb6f67-c9f3-45f9-b0aa-aa6a37310c88.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon.png">
+<link rel="icon" href="icon.png">
 <link rel="manifest" href="manifest.json">
 <style>
   :root{
@@ -896,7 +896,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // top window's <head> as well as our own. Wrapped in try/catch because
   // cross-origin frames may block it.
   function injectAppleIcon(){
-    var url = 'https://raw.githubusercontent.com/agdutoit-oss/bok-log/main/f9fb6f67-c9f3-45f9-b0aa-aa6a37310c88.png';
+    var url = 'icon.png';
     function addTo(doc){
       try{
         var l = doc.createElement('link');
@@ -1289,6 +1289,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   function saveBuck(){
     if(saving) return;
+    try{
     saving=true;
     document.getElementById('saveBtn').textContent='Saving…';
 
@@ -1326,6 +1327,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       syncQueue();
     } else {
       toast('Buck #'+state.count+' saved offline — will sync when you have signal');
+    }
+    }catch(err){
+      saving=false;
+      document.getElementById('saveBtn').textContent='Save buck';
+      toast('Save error: '+(err && err.message ? err.message : err));
+      console.error('saveBuck error', err);
     }
   }
 

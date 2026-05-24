@@ -7,7 +7,7 @@
   "theme_color": "#13150f",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/agdutoit-oss/bok-log/main/f9fb6f67-c9f3-45f9-b0aa-aa6a37310c88.png",
+      "src": "icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
