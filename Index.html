@@ -970,15 +970,22 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function onSession(res){
     if(!res || !res.ok){ onFail(res && res.error); return; }
     if(!res.session){
-      // No session yet — make one automatically.
       google.script.run.withSuccessHandler(onSession).withFailureHandler(onFail).startSession('');
       return;
     }
     state.session = res.session;
     var serverBucks = res.bucks || [];
-    // Keep any still-pending (unsynced) bucks on top of the server's list.
     var pending = (state.bucks||[]).filter(function(b){ return b.pending; });
-    state.count = (res.count || 0) + pending.length;
+
+    // Safety: if the server read came back empty but we already had synced
+    // (non-pending) bucks on screen, keep showing them — this avoids the
+    // radar flashing to 0 when a read races ahead of a just-written buck.
+    var existingSynced = (state.bucks||[]).filter(function(b){ return !b.pending; });
+    if(serverBucks.length === 0 && existingSynced.length > 0){
+      serverBucks = existingSynced;
+    }
+
+    state.count = serverBucks.length + pending.length;
     state.bucks = serverBucks.concat(pending);
     renderAll();
     updatePendingBadge();
@@ -1420,9 +1427,11 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var left = queueLen();
     if(okCount>0){
       toast(okCount+' synced'+(left?(', '+left+' still waiting'):''));
-      // Refresh from server so numbers/positions are authoritative.
-      google.script.run.withSuccessHandler(onSession).withFailureHandler(function(){}).getSession(null);
-      if(state.view==='all') refreshGroup(false);
+      // Wait a moment so the Firestore write is readable, then refresh.
+      setTimeout(function(){
+        google.script.run.withSuccessHandler(onSession).withFailureHandler(function(){}).getSession(null);
+        if(state.view==='all') refreshGroup(false);
+      }, 1500);
     } else if(left){
       toast('Still no signal — '+left+' waiting');
     }
