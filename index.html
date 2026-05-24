@@ -724,6 +724,7 @@ API.getGroup = function(code){
         hunter:b.hunter||'',
         buckLat:(b.buckLat===undefined?'':b.buckLat),
         buckLng:(b.buckLng===undefined?'':b.buckLng),
+        pinnedActual: !!b.pinnedActual,
         collected: !!b.collected
       });
     });
@@ -749,6 +750,17 @@ API.setCollected = function(data){
   var code = codeUp_(data.code);
   return bucksRef_(code).doc(String(data.row)).update({ collected: !!data.collected })
     .then(function(){ return { ok:true }; })
+    .catch(function(e){ return { ok:false, error:String(e) }; });
+};
+
+// Pin the bok's ACTUAL location (you're standing at it with a good GPS fix).
+// Overwrites the estimated buckLat/buckLng and flags it as a real fix.
+API.pinBuckLocation = function(data){
+  var code = codeUp_(data.code);
+  return bucksRef_(code).doc(String(data.row)).update({
+    buckLat: Number(data.lat), buckLng: Number(data.lng),
+    pinnedActual: true
+  }).then(function(){ return { ok:true }; })
     .catch(function(e){ return { ok:false, error:String(e) }; });
 };
 
@@ -1834,8 +1846,14 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         : '';
       // Expandable detail panel (hidden until the row is tapped).
       var time = (''+b.timestamp).split(' ')[1] || '';
-      var gps = (b.buckLat!=='' && b.buckLng!=='')
-        ? (Number(b.buckLat).toFixed(5)+', '+Number(b.buckLng).toFixed(5)) : 'no GPS';
+      var hasGps = (b.buckLat!=='' && b.buckLng!=='');
+      var gps = hasGps
+        ? (Number(b.buckLat).toFixed(5)+', '+Number(b.buckLng).toFixed(5)
+           + (b.pinnedActual?' (actual ✓)':' (estimated)'))
+        : 'no GPS';
+      var pinBtn = !viewingPastCode
+        ? '<button class="copybtn" style="background:var(--good);color:#06311a;" onclick="event.stopPropagation();pinBuckHere(\''+b.row+'\')">📍 Pin actual location</button>'
+        : '';
       var detail = '<div class="bokdetail" id="detail_'+b.row+'" style="display:'+(expandedBucks[b.row]?'block':'none')+';">'
         + '<div><span>Hunter</span>'+esc(b.hunter||'—')+'</div>'
         + '<div><span>Direction</span>'+Math.round(Number(b.bearing)||0)+'° '+compassName(Number(b.bearing)||0)+'</div>'
@@ -1845,6 +1863,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         + '<div><span>GPS</span>'+gps+'</div>'
         + '<div><span>Status</span>'+(b.collected?'picked up ✓':'not collected')+'</div>'
         + '<div class="bokactions">'+coords+editbtns+'</div>'
+        + '<div class="bokactions" style="padding-top:6px;">'+pinBtn+'</div>'
         + '</div>';
       rows.push('<div class="item bokitem'+(b.collected?' collected':'')+'" onclick="toggleBuckDetail(\''+b.row+'\')">'
         + '<div class="badge" style="background:'+c+';color:#fff;">'+b.number+'</div>'
@@ -1858,6 +1877,26 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
     el.innerHTML = rows.length ? rows.join('') :
       '<div class="empty">No one has reported in yet on this code.</div>';
+  }
+
+  // Pin a bok's ACTUAL location: you're standing at it, so use current GPS.
+  function pinBuckHere(row){
+    if(!navigator.geolocation){ toast('No GPS on device'); return; }
+    if(!confirm('Pin this bok at your current location? You should be standing at the bok.')) return;
+    toast('Getting your GPS…');
+    navigator.geolocation.getCurrentPosition(function(pos){
+      google.script.run
+        .withSuccessHandler(function(res){
+          if(!res || !res.ok){ toast(res&&res.error?res.error:'Could not pin'); return; }
+          toast('Location pinned ✓');
+          expandedBucks[row] = true;   // keep the panel open after refresh
+          refreshFromGroup();
+        })
+        .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+        .pinBuckLocation({ code: state.code, row: row,
+          lat: pos.coords.latitude, lng: pos.coords.longitude });
+    }, function(){ toast('Could not get GPS — try again in the open'); },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
   }
 
   var expandedBucks = {};   // row id -> true when its detail panel is open
