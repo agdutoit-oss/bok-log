@@ -645,9 +645,13 @@ API.saveBuck = function(data){
   return huntRef_(code).get().then(function(doc){
     if (doc.exists && doc.data().status === 'ended')
       return { ok:false, error:'This hunt has ended — logging is closed.' };
-    // Buck number = current count for this hunter +1 (simple per-hunt count).
-    return bucksRef_(code).where('deleted','==',false).get().then(function(snap){
-      var number = snap.size + 1;
+    // Count existing (non-deleted) bucks WITHOUT a where() query — a where on
+    // 'deleted' can need a composite index or fail, which was making every
+    // buck come back as #1. Read all, filter in code.
+    return bucksRef_(code).get().then(function(snap){
+      var existing = 0;
+      snap.forEach(function(d){ if(!d.data().deleted) existing++; });
+      var number = existing + 1;
       var bp = projectPosition_(data.lat, data.lng, data.bearing, data.distance);
       var buck = {
         timestamp: nowStamp_(),
@@ -1441,7 +1445,6 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         if(!res || !res.ok) return;
         lastGroup = { hunters: res.hunters||[], bucks: res.bucks||[] };
         var myname = (state.name||'').toLowerCase().trim();
-        // My radar = only my own bucks from the server + any still-pending.
         var pending = (state.bucks||[]).filter(function(b){ return b.pending; });
         var mine = (res.bucks||[]).filter(function(b){
           return myname && String(b.hunter||'').toLowerCase().trim() === myname;
@@ -1449,7 +1452,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
           return { row:b.row, number:b.number, bearing:b.bearing, distance:b.distance,
                    notes:b.notes, timestamp:b.timestamp, collected:b.collected };
         });
-        state.bucks = mine.concat(pending);
+        var next = mine.concat(pending);
+        // SAFETY NET: if the read came back with none of my bucks but I already
+        // had some showing, keep what's on screen — never blank the radar.
+        var hadSynced = (state.bucks||[]).filter(function(b){ return !b.pending; }).length;
+        if(next.length === 0 && hadSynced > 0){ renderGroup(); return; }
+        state.bucks = next;
         state.count = state.bucks.length;
         renderAll();
         renderGroup();
