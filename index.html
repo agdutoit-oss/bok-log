@@ -613,10 +613,30 @@ API.getHuntName = function(code){
   });
 };
 
-// Sessions are unused in Firestore (hunt code groups everything), but the UI
-// still calls them, so return harmless shapes.
-API.getSession = function(){ return Promise.resolve({ ok:true, session:'Hunt', count:0, bucks:[] }); };
-API.startSession = function(){ return Promise.resolve({ ok:true, session:'Hunt', count:0, bucks:[] }); };
+// "Session" now means: bucks in the current hunt, read live from Firestore.
+// (No name filter — avoids any mismatch between saved hunter and state.name.)
+API.getSession = function(){
+  try{
+    var code = (typeof state!=='undefined' && state.code) ? state.code : '';
+    if(!code) return Promise.resolve({ ok:true, session:'Hunt', count:0, bucks:[] });
+    return bucksRef_(code).get().then(function(snap){
+      var list = [];
+      snap.forEach(function(d){
+        var b = d.data();
+        if (b.deleted) return;
+        list.push({
+          row: d.id, number: b.number, bearing: b.bearing, distance: b.distance,
+          notes: b.notes||'', timestamp: b.timestamp||'', collected: !!b.collected
+        });
+      });
+      list.sort(function(a,b){ return (a.number||0)-(b.number||0); });
+      return { ok:true, session:'Hunt', count: list.length, bucks: list };
+    }).catch(function(){ return { ok:true, session:'Hunt', count:0, bucks:[] }; });
+  }catch(e){
+    return Promise.resolve({ ok:true, session:'Hunt', count:0, bucks:[] });
+  }
+};
+API.startSession = function(){ return API.getSession(); };
 
 API.saveBuck = function(data){
   data = data || {};
@@ -625,9 +645,13 @@ API.saveBuck = function(data){
   return huntRef_(code).get().then(function(doc){
     if (doc.exists && doc.data().status === 'ended')
       return { ok:false, error:'This hunt has ended — logging is closed.' };
-    // Buck number = current count for this hunter +1 (simple per-hunt count).
-    return bucksRef_(code).where('deleted','==',false).get().then(function(snap){
-      var number = snap.size + 1;
+    // Count existing (non-deleted) bucks WITHOUT a where() query — a where on
+    // 'deleted' can need a composite index or fail, which was making every
+    // buck come back as #1. Read all, filter in code.
+    return bucksRef_(code).get().then(function(snap){
+      var existing = 0;
+      snap.forEach(function(d){ if(!d.data().deleted) existing++; });
+      var number = existing + 1;
       var bp = projectPosition_(data.lat, data.lng, data.bearing, data.distance);
       var buck = {
         timestamp: nowStamp_(),
@@ -915,10 +939,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     loadIdentity();
     renderWhoami();
     renderAll();              // draw the radar grid + empty list right away
-    google.script.run
-      .withSuccessHandler(onSession)
-      .withFailureHandler(onFail)
-      .getSession(null);
+    if(state.code){ refreshFromGroup(); }
     locateChair();
     if(!state.name || !state.code){ openSetup(); }
     else {
@@ -948,15 +969,22 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function onSession(res){
     if(!res || !res.ok){ onFail(res && res.error); return; }
     if(!res.session){
-      // No session yet — make one automatically.
       google.script.run.withSuccessHandler(onSession).withFailureHandler(onFail).startSession('');
       return;
     }
     state.session = res.session;
     var serverBucks = res.bucks || [];
-    // Keep any still-pending (unsynced) bucks on top of the server's list.
     var pending = (state.bucks||[]).filter(function(b){ return b.pending; });
-    state.count = (res.count || 0) + pending.length;
+
+    // Safety: if the server read came back empty but we already had synced
+    // (non-pending) bucks on screen, keep showing them — this avoids the
+    // radar flashing to 0 when a read races ahead of a just-written buck.
+    var existingSynced = (state.bucks||[]).filter(function(b){ return !b.pending; });
+    if(serverBucks.length === 0 && existingSynced.length > 0){
+      serverBucks = existingSynced;
+    }
+
+    state.count = serverBucks.length + pending.length;
     state.bucks = serverBucks.concat(pending);
     renderAll();
     updatePendingBadge();
@@ -1398,13 +1426,45 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var left = queueLen();
     if(okCount>0){
       toast(okCount+' synced'+(left?(', '+left+' still waiting'):''));
-      // Refresh from server so numbers/positions are authoritative.
-      google.script.run.withSuccessHandler(onSession).withFailureHandler(function(){}).getSession(null);
-      if(state.view==='all') refreshGroup(false);
+      // The Active-Hunt map already reads correctly via getGroup; reuse that
+      // same data for My radar so the two never disagree. Wait a moment so the
+      // just-written buck is readable.
+      setTimeout(function(){ refreshFromGroup(); }, 1500);
     } else if(left){
       toast('Still no signal — '+left+' waiting');
     }
     updatePendingBadge();
+  }
+
+  // Pull the hunt's bucks via getGroup. The Active-Hunt map shows everyone;
+  // My radar shows only MY bucks. getGroup is proven reliable (the map works).
+  function refreshFromGroup(){
+    if(!state.code) return;
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(!res || !res.ok) return;
+        lastGroup = { hunters: res.hunters||[], bucks: res.bucks||[] };
+        var myname = (state.name||'').toLowerCase().trim();
+        var pending = (state.bucks||[]).filter(function(b){ return b.pending; });
+        var mine = (res.bucks||[]).filter(function(b){
+          return myname && String(b.hunter||'').toLowerCase().trim() === myname;
+        }).map(function(b){
+          return { row:b.row, number:b.number, bearing:b.bearing, distance:b.distance,
+                   notes:b.notes, timestamp:b.timestamp, collected:b.collected };
+        });
+        var next = mine.concat(pending);
+        // SAFETY NET: if the read came back with none of my bucks but I already
+        // had some showing, keep what's on screen — never blank the radar.
+        var hadSynced = (state.bucks||[]).filter(function(b){ return !b.pending; }).length;
+        if(next.length === 0 && hadSynced > 0){ renderGroup(); return; }
+        state.bucks = next;
+        state.count = state.bucks.length;
+        renderAll();
+        renderGroup();
+        updatePendingBadge();
+      })
+      .withFailureHandler(function(){})
+      .getGroup(state.code);
   }
 
   // ---------- setup modal (choose / start / join) ----------
