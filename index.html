@@ -461,6 +461,22 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
     </div>
   </div>
 
+  <!-- ===== PIN modal (numeric) ===== -->
+  <div class="overlay" id="pinOverlay">
+    <div class="sheet">
+      <h3 id="pinTitle">Enter PIN</h3>
+      <div class="hint" id="pinHint" style="margin-bottom:12px;"></div>
+      <div class="row">
+        <input id="pinInput" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+               placeholder="••••" style="text-align:center; letter-spacing:6px; font-size:22px;">
+      </div>
+      <div class="actions">
+        <button class="cancel" onclick="closePin()">Cancel</button>
+        <button class="save" onclick="confirmPin()">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== End hunt modal ===== -->
   <div class="overlay" id="endOverlay">
     <div class="sheet">
@@ -1820,7 +1836,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var time = (''+b.timestamp).split(' ')[1] || '';
       var gps = (b.buckLat!=='' && b.buckLng!=='')
         ? (Number(b.buckLat).toFixed(5)+', '+Number(b.buckLng).toFixed(5)) : 'no GPS';
-      var detail = '<div class="bokdetail" id="detail_'+b.row+'" style="display:none;">'
+      var detail = '<div class="bokdetail" id="detail_'+b.row+'" style="display:'+(expandedBucks[b.row]?'block':'none')+';">'
         + '<div><span>Hunter</span>'+esc(b.hunter||'—')+'</div>'
         + '<div><span>Direction</span>'+Math.round(Number(b.bearing)||0)+'° '+compassName(Number(b.bearing)||0)+'</div>'
         + '<div><span>Distance</span>'+(b.distance?(b.distance+' m'):'—')+'</div>'
@@ -1844,10 +1860,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       '<div class="empty">No one has reported in yet on this code.</div>';
   }
 
+  var expandedBucks = {};   // row id -> true when its detail panel is open
   function toggleBuckDetail(row){
     var d = document.getElementById('detail_'+row);
     if(!d) return;
-    d.style.display = (d.style.display==='none' || !d.style.display) ? 'block' : 'none';
+    var open = (d.style.display==='none' || !d.style.display);
+    d.style.display = open ? 'block' : 'none';
+    if(open){ expandedBucks[row] = true; } else { delete expandedBucks[row]; }
   }
 
   function copyCoords(lat,lng){
@@ -2128,40 +2147,63 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       + '<button class="ghost" style="width:100%;margin-top:12px;background:#5a1f1f;color:#fff;border-color:#7a2a2a;" onclick="deleteSelectedHunts()">🗑 Delete selected hunts</button>';
   }
 
-  // Delete every checked hunt, asking for the PIN once.
+  // Delete every checked hunt, asking for the PIN once (numeric modal).
   function deleteSelectedHunts(){
     var boxes = document.querySelectorAll('.histcheck:checked');
     if(!boxes.length){ toast('Tick the hunts you want to delete first'); return; }
     var codes = []; for(var i=0;i<boxes.length;i++){ codes.push(boxes[i].value); }
-    var pin = prompt('Enter PIN to delete '+codes.length+' hunt'+(codes.length===1?'':'s')+'. This cannot be undone.');
-    if(pin===null) return;
-    toast('Deleting '+codes.length+'…');
-    var done=0, failed=0;
-    function next(i){
-      if(i>=codes.length){
-        toast(done+' deleted'+(failed?(', '+failed+' failed'):''));
-        openHistory();
-        return;
+    askPin('Delete '+codes.length+' hunt'+(codes.length===1?'':'s')+'?',
+           'This cannot be undone.', function(pin){
+      toast('Deleting '+codes.length+'…');
+      var done=0, failed=0;
+      function next(i){
+        if(i>=codes.length){
+          toast(done+' deleted'+(failed?(', '+failed+' failed'):''));
+          openHistory();
+          return;
+        }
+        google.script.run
+          .withSuccessHandler(function(res){ if(res&&res.ok) done++; else failed++; next(i+1); })
+          .withFailureHandler(function(){ failed++; next(i+1); })
+          .deleteHunt({ code: codes[i], pin: pin });
       }
-      google.script.run
-        .withSuccessHandler(function(res){ if(res&&res.ok) done++; else failed++; next(i+1); })
-        .withFailureHandler(function(){ failed++; next(i+1); })
-        .deleteHunt({ code: codes[i], pin: pin });
-    }
-    next(0);
+      next(0);
+    });
   }
 
   function deleteHuntPrompt(code){
-    var pin = prompt('Enter PIN to delete hunt "'+code+'". This removes it from history.');
-    if(pin===null) return;
-    google.script.run
-      .withSuccessHandler(function(res){
-        if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not delete'); return; }
-        toast('Hunt deleted');
-        openHistory();
-      })
-      .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
-      .deleteHunt({ code: code, pin: pin });
+    askPin('Delete hunt "'+code+'"?', 'This removes it from history.', function(pin){
+      google.script.run
+        .withSuccessHandler(function(res){
+          if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not delete'); return; }
+          toast('Hunt deleted');
+          openHistory();
+        })
+        .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
+        .deleteHunt({ code: code, pin: pin });
+    });
+  }
+
+  // ---- numeric PIN modal ----
+  var pinCallback = null;
+  function askPin(title, hint, cb){
+    pinCallback = cb;
+    document.getElementById('pinTitle').textContent = title;
+    document.getElementById('pinHint').textContent = hint || '';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinOverlay').classList.add('show');
+    setTimeout(function(){ document.getElementById('pinInput').focus(); }, 100);
+  }
+  function closePin(){
+    document.getElementById('pinOverlay').classList.remove('show');
+    pinCallback = null;
+  }
+  function confirmPin(){
+    var pin = document.getElementById('pinInput').value;
+    if(!pin){ toast('Enter the PIN'); return; }
+    var cb = pinCallback;
+    closePin();
+    if(cb) cb(pin);
   }
 
   // View a past hunt: load its data into the Everyone view without changing
