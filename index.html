@@ -160,6 +160,12 @@
     border-bottom:1px solid rgba(255,255,255,.05);}
   .bokdetail > div span{color:var(--muted); margin-right:12px;}
   .bokdetail .bokactions{display:flex; gap:8px; justify-content:flex-end; border:none; padding-top:10px;}
+  .bokbtns{display:flex; gap:8px; padding-top:12px; border:none;}
+  .bokbtn{flex:1; padding:14px 4px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--text); border-radius:10px; font-size:13px; font-weight:600; line-height:1.5;
+    cursor:pointer; text-align:center;}
+  .bokbtn:active{transform:translateY(1px);}
+  .bokbtn.pin{background:var(--good); color:#06311a; border-color:var(--good);}
 
   /* Hunter name labels on the map — text shadow keeps them readable on satellite */
   .maplabel{ text-shadow: 0 0 3px #000, 0 0 3px #000, 0 1px 2px #000; }
@@ -1835,15 +1841,16 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var dist = b.distance ? (b.distance+' m') : '—';
       var notes = b.notes ? ' · '+esc(b.notes) : '';
       var coords = (b.buckLat!=='' && b.buckLng!=='')
-        ? '<button class="copybtn" onclick="event.stopPropagation();navigateTo('+b.buckLat+','+b.buckLng+')">▶ Go</button>' : '';
+        ? '<button class="bokbtn" onclick="event.stopPropagation();navigateTo('+b.buckLat+','+b.buckLng+')">▶<br>Go</button>'
+        : '<button class="bokbtn" disabled style="opacity:.4;">▶<br>Go</button>';
       var tick = '<button class="tickbtn'+(b.collected?' done':'')+'" '
         + 'onclick="event.stopPropagation();toggleCollected(\''+b.row+'\','+(b.collected?'false':'true')+')">'
         + (b.collected?'✓':'○')+'</button>';
       var mine = !viewingPastCode && state.name &&
                  (b.hunter||'').toLowerCase() === state.name.toLowerCase();
-      var editbtns = mine
-        ? '<button class="copybtn" onclick="event.stopPropagation();openEditBuck(\''+b.row+'\')">Edit</button>'
-        : '';
+      var editbtn = mine
+        ? '<button class="bokbtn" onclick="event.stopPropagation();openEditBuck(\''+b.row+'\')">✎<br>Edit</button>'
+        : '<button class="bokbtn" disabled style="opacity:.4;">✎<br>Edit</button>';
       // Expandable detail panel (hidden until the row is tapped).
       var time = (''+b.timestamp).split(' ')[1] || '';
       var hasGps = (b.buckLat!=='' && b.buckLng!=='');
@@ -1852,8 +1859,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
            + (b.pinnedActual?' (actual ✓)':' (estimated)'))
         : 'no GPS';
       var pinBtn = !viewingPastCode
-        ? '<button class="copybtn" style="background:var(--good);color:#06311a;" onclick="event.stopPropagation();pinBuckHere(\''+b.row+'\')">📍 Pin actual location</button>'
-        : '';
+        ? '<button class="bokbtn pin" onclick="event.stopPropagation();pinBuckHere(\''+b.row+'\')">📍<br>Pin here</button>'
+        : '<button class="bokbtn" disabled style="opacity:.4;">📍<br>Pin here</button>';
       var detail = '<div class="bokdetail" id="detail_'+b.row+'" style="display:'+(expandedBucks[b.row]?'block':'none')+';">'
         + '<div><span>Hunter</span>'+esc(b.hunter||'—')+'</div>'
         + '<div><span>Direction</span>'+Math.round(Number(b.bearing)||0)+'° '+compassName(Number(b.bearing)||0)+'</div>'
@@ -1862,8 +1869,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         + '<div><span>Time</span>'+(time?time.substring(0,5):'—')+'</div>'
         + '<div><span>GPS</span>'+gps+'</div>'
         + '<div><span>Status</span>'+(b.collected?'picked up ✓':'not collected')+'</div>'
-        + '<div class="bokactions">'+coords+editbtns+'</div>'
-        + '<div class="bokactions" style="padding-top:6px;">'+pinBtn+'</div>'
+        + '<div class="bokbtns">'+coords+editbtn+pinBtn+'</div>'
         + '</div>';
       rows.push('<div class="item bokitem'+(b.collected?' collected':'')+'" onclick="toggleBuckDetail(\''+b.row+'\')">'
         + '<div class="badge" style="background:'+c+';color:#fff;">'+b.number+'</div>'
