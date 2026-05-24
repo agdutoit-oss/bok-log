@@ -257,21 +257,21 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
   <div id="viewMine">
     <div class="countcard">
       <div class="countnum" id="count">0</div>
-      <div class="countlbl">bucks logged</div>
+      <div class="countlbl">bokke logged</div>
     </div>
 
     <div class="radarwrap">
-      <svg id="radar" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" aria-label="Radar of logged bucks"></svg>
+      <svg id="radar" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" aria-label="Radar of logged bokke"></svg>
     </div>
 
     <div id="chairBanner" class="whoami" style="display:none; cursor:default; border-color:var(--accent);">
       ⚠ Set your chair before logging — go to <b>Active Hunt</b> and tap <b>Set my chair here</b>.
     </div>
     <div id="pendingBadge" class="whoami" style="display:none; cursor:pointer; border-color:var(--accent2); color:var(--accent2);" onclick="syncQueue(true)"></div>
-    <button class="bigbtn" id="logBtn" onclick="openLog()">⌖ Log a buck</button>
+    <button class="bigbtn" id="logBtn" onclick="openLog()">⌖ Log a bok</button>
 
     <div class="list" id="list">
-      <div class="empty">No bucks logged yet.</div>
+      <div class="empty">No bokke logged yet.</div>
     </div>
 
     <div class="footer">
@@ -279,7 +279,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
       <button class="ghost" onclick="openSummary(state.code)">📊 Summary</button>
       <button class="ghost" onclick="openEndHunt()">⛔ End hunt</button>
     </div>
-    <button class="ghost" id="syncBtn" style="display:none; width:100%; margin-top:8px; border-color:var(--accent2); color:var(--accent2);" onclick="syncQueue(true)">⟳ Sync waiting bucks now</button>
+    <button class="ghost" id="syncBtn" style="display:none; width:100%; margin-top:8px; border-color:var(--accent2); color:var(--accent2);" onclick="syncQueue(true)">⟳ Sync waiting bokke now</button>
   </div>
 
   <!-- EVERYONE view -->
@@ -287,7 +287,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
     <button class="ghost" style="width:100%; margin-bottom:10px; padding:13px; font-size:15px;" onclick="pingPosition()">⚲ Set my chair here</button>
     <div class="grouprow">
       <div class="grouppill"><span id="hunterCount">0</span> hunters</div>
-      <div class="grouppill"><span id="groupBuckCount">0</span> bucks</div>
+      <div class="grouppill"><span id="groupBuckCount">0</span> bokke</div>
       <button class="ghost refreshbtn" onclick="refreshGroup(true)">↻ Refresh</button>
     </div>
     <div class="toggles">
@@ -299,7 +299,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
         </span>
       </label>
       <label class="switchrow">
-        <span class="switchlbl">Show bucks</span>
+        <span class="switchlbl">Show bokke</span>
         <span class="switch">
           <input type="checkbox" id="swBucks" checked onchange="onToggleBucks()">
           <span class="slider"></span>
@@ -315,7 +315,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
   <!-- ===== Log modal ===== -->
   <div class="overlay" id="overlay">
     <div class="sheet">
-      <h3 id="modalTitle">Log buck #1</h3>
+      <h3 id="modalTitle">Log bok #1</h3>
 
       <div class="diallabel">
         <span>Direction (tap or drag the dial)</span>
@@ -358,7 +358,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
 
       <div class="actions">
         <button class="cancel" onclick="closeLog()">Cancel</button>
-        <button class="save" id="saveBtn" onclick="saveBuck()">Save buck</button>
+        <button class="save" id="saveBtn" onclick="saveBuck()">Save bok</button>
       </div>
       <div class="gps" id="gpsState">Getting chair GPS…</div>
     </div>
@@ -440,7 +440,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
   <div class="overlay" id="historyOverlay">
     <div class="sheet">
       <h3>Hunt history</h3>
-      <div class="hint" style="margin-bottom:12px;">Tap a past hunt to view its bucks and map. Your current hunt code stays unchanged.</div>
+      <div class="hint" style="margin-bottom:12px;">Tap a past hunt to view its bokke and map. Your current hunt code stays unchanged.</div>
       <div class="list" id="historyList">
         <div class="empty">Loading…</div>
       </div>
@@ -480,10 +480,10 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
     </div>
   </div>
 
-  <!-- ===== Edit buck modal ===== -->
+  <!-- ===== Edit bok modal ===== -->
   <div class="overlay" id="editOverlay">
     <div class="sheet">
-      <h3>Edit buck</h3>
+      <h3>Edit bok</h3>
       <div class="row">
         <label class="fld">Direction (degrees)</label>
         <input id="editBearing" type="number" inputmode="numeric">
@@ -729,10 +729,10 @@ API.editBuck = function(data){
   var code = codeUp_(data.code);
   var ref = bucksRef_(code).doc(String(data.row));
   return ref.get().then(function(doc){
-    if (!doc.exists) return { ok:false, error:'Buck not found.' };
+    if (!doc.exists) return { ok:false, error:'Bok not found.' };
     var b = doc.data();
     if (String(b.hunter||'').toLowerCase().trim() !== String(data.hunter||'').toLowerCase().trim())
-      return { ok:false, error:'You can only change your own bucks.' };
+      return { ok:false, error:'You can only change your own bokke.' };
     var bp = projectPosition_(b.chairLat, b.chairLng, data.bearing, data.distance);
     return ref.update({
       bearing: Number(data.bearing)||0,
@@ -747,10 +747,10 @@ API.deleteBuck = function(data){
   var code = codeUp_(data.code);
   var ref = bucksRef_(code).doc(String(data.row));
   return ref.get().then(function(doc){
-    if (!doc.exists) return { ok:false, error:'Buck not found.' };
+    if (!doc.exists) return { ok:false, error:'Bok not found.' };
     var b = doc.data();
     if (String(b.hunter||'').toLowerCase().trim() !== String(data.hunter||'').toLowerCase().trim())
-      return { ok:false, error:'You can only change your own bucks.' };
+      return { ok:false, error:'You can only change your own bokke.' };
     return ref.update({ deleted:true }).then(function(){ return { ok:true }; });
   });
 };
@@ -1046,7 +1046,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   function renderList(){
     var el = document.getElementById('list');
-    if(!state.bucks.length){ el.innerHTML = '<div class="empty">No bucks logged yet.</div>'; return; }
+    if(!state.bucks.length){ el.innerHTML = '<div class="empty">No bokke logged yet.</div>'; return; }
     var html = '';
     // newest first
     state.bucks.slice().reverse().forEach(function(b){
@@ -1271,7 +1271,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     setBearing(0,false);
     document.getElementById('distance').value='';
     document.getElementById('notes').value='';
-    document.getElementById('modalTitle').textContent='Log buck #'+(state.count+1);
+    document.getElementById('modalTitle').textContent='Log bok #'+(state.count+1);
     document.getElementById('overlay').classList.add('show');
     gps('Chair GPS locked (±'+Math.round(state.chair.accuracy)+' m)');
   }
@@ -1306,7 +1306,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var el = document.getElementById('pendingBadge');
     if(el){
       var parts = [];
-      if(n) parts.push(n + ' buck' + (n===1?'':'s'));
+      if(n) parts.push(n + (n===1?' bok':' bokke'));
       if(hasPos) parts.push('chair position');
       el.style.display = (n||hasPos) ? '' : 'none';
       el.textContent = parts.join(' + ') + ' waiting to sync ⟳';
@@ -1348,17 +1348,17 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     closeLog();
 
     saving=false;
-    document.getElementById('saveBtn').textContent='Save buck';
+    document.getElementById('saveBtn').textContent='Save bok';
 
     if(navigator.onLine){
-      toast('Buck #'+state.count+' saved — syncing…');
+      toast('Bok #'+state.count+' saved — syncing…');
       syncQueue();
     } else {
-      toast('Buck #'+state.count+' saved offline — will sync when you have signal');
+      toast('Bok #'+state.count+' saved offline — will sync when you have signal');
     }
     }catch(err){
       saving=false;
-      document.getElementById('saveBtn').textContent='Save buck';
+      document.getElementById('saveBtn').textContent='Save bok';
       toast('Save error: '+(err && err.message ? err.message : err));
       console.error('saveBuck error', err);
     }
@@ -1688,7 +1688,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         : '';
       rows.push('<div class="item'+(b.collected?' collected':'')+'">'
         + '<div class="badge" style="background:'+c+';color:#fff;">'+b.number+'</div>'
-        + '<div class="meta"><div class="metatop">'+esc(b.hunter)+' · buck #'+b.number+' · '+dist+'</div>'
+        + '<div class="meta"><div class="metatop">'+esc(b.hunter)+' · bok #'+b.number+' · '+dist+'</div>'
         + '<div class="metabot">'+Math.round(Number(b.bearing)||0)+'°'+notes+'</div></div>'
         + coords + editbtns + tick
         + '</div>');
@@ -1751,7 +1751,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     google.script.run
       .withSuccessHandler(function(res){
         if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not save'); return; }
-        closeEditBuck(); refreshGroup(false); toast('Buck updated');
+        closeEditBuck(); refreshGroup(false); toast('Bok updated');
       })
       .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
       .editBuck({
@@ -1764,12 +1764,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   function deleteThisBuck(){
     if(editRow===null) return;
-    if(!confirm('Delete this buck? It will be removed from the map and counts.')) return;
+    if(!confirm('Delete this bok? It will be removed from the map and counts.')) return;
     toast('Deleting…');
     google.script.run
       .withSuccessHandler(function(res){
         if(!res||!res.ok){ toast(res&&res.error?res.error:'Could not delete'); return; }
-        closeEditBuck(); refreshGroup(false); toast('Buck deleted');
+        closeEditBuck(); refreshGroup(false); toast('Bok deleted');
       })
       .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
       .deleteBuck({ row: editRow, code: state.code, hunter: state.name });
@@ -1898,7 +1898,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var pos = { lat:Number(b.buckLat), lng:Number(b.buckLng) };
       mapMarkers.push(new google.maps.Marker({
         map: map, position: pos,
-        title: b.hunter+' buck #'+b.number+' ('+(b.distance||'?')+'m)'+(b.collected?' — collected':''),
+        title: b.hunter+' bok #'+b.number+' ('+(b.distance||'?')+'m)'+(b.collected?' — collected':''),
         label: { text: String(b.collected?'\u2713':b.number), color:'#fff', fontSize:'13px', fontWeight:'700' },
         icon: dotIcon(b.collected ? '#5dca7a' : colorFor(b.hunter), 14)
       }));
@@ -2075,7 +2075,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         + '<div style="font-size:'+num+'px;font-weight:700;color:var(--accent2);line-height:1;">'+val+'</div>'
         + '<div style="font-size:11px;color:var(--muted);margin-top:4px;">'+label+'</div></div>';
     }
-    var ch = '<div style="margin-bottom:8px;">'+card('Total bucks',s.total,true)+'</div>'
+    var ch = '<div style="margin-bottom:8px;">'+card('Total bokke',s.total,true)+'</div>'
            + '<div style="display:flex;gap:8px;margin-bottom:8px;">'+card('Male',s.male)+card('Female',s.female)+'</div>'
            + '<div style="display:flex;gap:8px;">'+card('Head',s.head)+card('Body',s.body)+'</div>';
     document.getElementById('sumCards').innerHTML = ch;
@@ -2084,11 +2084,11 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     (s.hunters||[]).forEach(function(h){
       var st=h.stats;
       rows += '<div class="item"><div class="meta">'
-            + '<div class="metatop">'+esc(h.hunter)+' · '+st.total+' bucks</div>'
+            + '<div class="metatop">'+esc(h.hunter)+' · '+st.total+' bokke</div>'
             + '<div class="metabot">M '+st.male+' · F '+st.female+' · head '+st.head+' · body '+st.body+'</div>'
             + '</div></div>';
     });
-    document.getElementById('sumHunters').innerHTML = rows || '<div class="empty">No bucks logged.</div>';
+    document.getElementById('sumHunters').innerHTML = rows || '<div class="empty">No bokke logged.</div>';
   }
 
   function downloadPdf(){
@@ -2102,7 +2102,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         rows += '<tr><td>'+esc(h.hunter)+'</td><td class="n">'+st.total+'</td><td class="n">'+st.male
               + '</td><td class="n">'+st.female+'</td><td class="n">'+st.head+'</td><td class="n">'+st.body+'</td></tr>';
       });
-      if(!rows) rows='<tr><td colspan="6" style="text-align:center;color:#888;">No bucks logged</td></tr>';
+      if(!rows) rows='<tr><td colspan="6" style="text-align:center;color:#888;">No bokke logged</td></tr>';
       var html='<html><head><meta charset="utf-8"><title>'+esc(s.huntName)+'</title><style>'
         + 'body{font-family:Helvetica,Arial,sans-serif;color:#222;margin:32px;}'
         + 'h1{font-size:24px;margin:0 0 4px;color:#b35a18;}'
@@ -2127,10 +2127,10 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         + '<div class="card"><div class="v">'+s.head+'</div><div class="l">Head</div></div>'
         + '<div class="card"><div class="v">'+s.body+'</div><div class="l">Body</div></div>'
         + '</div>'
-        + '<table><thead><tr><th>Hunter</th><th class="n">Bucks</th><th class="n">Male</th>'
+        + '<table><thead><tr><th>Hunter</th><th class="n">Bokke</th><th class="n">Male</th>'
         + '<th class="n">Female</th><th class="n">Head</th><th class="n">Body</th></tr></thead>'
         + '<tbody>'+rows+'</tbody></table>'
-        + '<div class="foot">Counts come from notes logged with each buck.</div>'
+        + '<div class="foot">Counts come from notes logged with each bok.</div>'
         + '<div class="noprint" style="margin-top:24px;"><button onclick="window.print()" '
         + 'style="padding:12px 20px;font-size:16px;background:#c1631d;color:#fff;border:none;border-radius:8px;">'
         + 'Save as PDF / Print</button></div>'
