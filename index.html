@@ -153,6 +153,13 @@
   .tickbtn.done{background:var(--good); border-color:var(--good); color:#06311a;}
   .item.collected{opacity:.55;}
   .item.collected .metatop{text-decoration:line-through;}
+  .bokitem{cursor:pointer;}
+  .bokdetail{background:var(--panel2); border:1px solid var(--line); border-top:none;
+    border-radius:0 0 12px 12px; margin:-8px 0 8px; padding:12px 14px; font-size:14px;}
+  .bokdetail > div{display:flex; justify-content:space-between; padding:5px 0;
+    border-bottom:1px solid rgba(255,255,255,.05);}
+  .bokdetail > div span{color:var(--muted); margin-right:12px;}
+  .bokdetail .bokactions{display:flex; gap:8px; justify-content:flex-end; border:none; padding-top:10px;}
 
   /* Hunter name labels on the map — text shadow keeps them readable on satellite */
   .maplabel{ text-shadow: 0 0 3px #000, 0 0 3px #000, 0 1px 2px #000; }
@@ -264,8 +271,13 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
       <svg id="radar" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" aria-label="Radar of logged bokke"></svg>
     </div>
 
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button class="ghost" id="setChairBtn" style="flex:1; padding:26px 13px; font-size:14px;" onclick="pingPosition()">⚲ Set chair</button>
+      <button class="ghost" id="setLandmarkBtn" style="flex:1; padding:26px 13px; font-size:14px;" onclick="setLandmark()">⛰ Set landmark</button>
+    </div>
+    <div id="landmarkLbl" class="whoami" style="display:none; cursor:pointer; border-color:var(--good); color:var(--good);" onclick="clearLandmark()"></div>
     <div id="chairBanner" class="whoami" style="display:none; cursor:default; border-color:var(--accent);">
-      ⚠ Set your chair before logging — go to <b>Active Hunt</b> and tap <b>Set my chair here</b>.
+      ⚠ Set your chair before logging — tap <b>Set my chair here</b> above.
     </div>
     <div id="pendingBadge" class="whoami" style="display:none; cursor:pointer; border-color:var(--accent2); color:var(--accent2);" onclick="syncQueue(true)"></div>
     <button class="bigbtn" id="logBtn" onclick="openLog()">⌖ Log a Bok</button>
@@ -284,7 +296,6 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
 
   <!-- EVERYONE view -->
   <div id="viewAll" style="display:none;">
-    <button class="ghost" style="width:100%; margin-bottom:10px; padding:13px; font-size:15px;" onclick="pingPosition()">⚲ Set my chair here</button>
     <div class="grouprow">
       <div class="grouppill"><span id="hunterCount">0</span> hunters</div>
       <div class="grouppill"><span id="groupBuckCount">0</span> bokke</div>
@@ -874,6 +885,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   // ---------- state ----------
   var state = { session:null, count:0, bucks:[], bearing:0, chair:null, chairSet:false,
+                landmark:null,
                 name:'', code:'', huntName:'', view:'mine' };
   var dialDragging = false;
   var compassActive = false;
@@ -887,6 +899,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       state.name = localStorage.getItem('vjg_name') || '';
       state.code = localStorage.getItem('vjg_code') || '';
       state.huntName = localStorage.getItem('vjg_huntname') || '';
+      var savedChair = localStorage.getItem('vjg_chair');
+      if(savedChair){
+        state.chair = JSON.parse(savedChair);
+        state.chairSet = true;
+      }
+      var savedLm = localStorage.getItem('vjg_landmark');
+      if(savedLm!==null && savedLm!==''){ state.landmark = Number(savedLm); }
     }catch(e){}
   }
   function saveIdentity(name, code){
@@ -935,9 +954,10 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   window.addEventListener('load', function(){
     injectAppleIcon();
-    drawDial();
     loadIdentity();
+    drawDial();
     renderWhoami();
+    updateLandmarkLabel();
     renderAll();              // draw the radar grid + empty list right away
     if(state.code){ refreshFromGroup(); }
     locateChair();
@@ -1085,12 +1105,28 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var x2=cx+r2*Math.cos(rad), y2=cy+r2*Math.sin(rad);
       svg += '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#5a5f42" stroke-width="2"/>';
     }
-    var card=[['N',0],['E',90],['S',180],['W',270]];
-    card.forEach(function(c){
-      var rad=(c[1]-90)*Math.PI/180, rr=R-34;
-      var x=cx+rr*Math.cos(rad), y=cy+rr*Math.sin(rad)+5;
-      svg += '<text x="'+x+'" y="'+y+'" text-anchor="middle" font-size="15" font-weight="700" fill="#a7a994">'+c[0]+'</text>';
-    });
+    var hasLm = (state.landmark!==null && state.landmark!==undefined);
+    if(hasLm){
+      // Dial top = the landmark. Mark it, and show where true North falls.
+      var lmTop = [['◆',0]];
+      lmTop.forEach(function(c){
+        var rad=(c[1]-90)*Math.PI/180, rr=R-34;
+        var x=cx+rr*Math.cos(rad), y=cy+rr*Math.sin(rad)+6;
+        svg += '<text x="'+x+'" y="'+y+'" text-anchor="middle" font-size="18" font-weight="700" fill="var(--good)">'+c[0]+'</text>';
+      });
+      // North sits at angle (-landmark) on the dial.
+      var nAng = ((0 - state.landmark)%360+360)%360;
+      var nrad=(nAng-90)*Math.PI/180, nrr=R-34;
+      var nx=cx+nrr*Math.cos(nrad), ny=cy+nrr*Math.sin(nrad)+5;
+      svg += '<text x="'+nx+'" y="'+ny+'" text-anchor="middle" font-size="13" font-weight="700" fill="#6f7457">N</text>';
+    } else {
+      var card=[['N',0],['E',90],['S',180],['W',270]];
+      card.forEach(function(c){
+        var rad=(c[1]-90)*Math.PI/180, rr=R-34;
+        var x=cx+rr*Math.cos(rad), y=cy+rr*Math.sin(rad)+5;
+        svg += '<text x="'+x+'" y="'+y+'" text-anchor="middle" font-size="15" font-weight="700" fill="#a7a994">'+c[0]+'</text>';
+      });
+    }
     svg += '<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="#a7a994"/>';
     svg += '<line id="needle" x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-R+22)+'" stroke="#e0832f" stroke-width="5" stroke-linecap="round"/>';
     svg += '<circle id="needledot" cx="'+cx+'" cy="'+(cy-R+22)+'" r="9" fill="#e0832f"/>';
@@ -1122,6 +1158,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     return (o.px*o.px + o.py*o.py) <= (130*130);
   }
 
+  // Convert the dial's current angle to a TRUE compass bearing for storage.
+  // With a landmark, the dial is relative to it, so add the landmark back.
+  function trueBearing(){
+    if(state.landmark===null || state.landmark===undefined) return state.bearing;
+    return ((state.bearing + state.landmark)%360 + 360)%360;
+  }
+
   function setBearingFromEvent(e){
     var o=dialOffset(e);
     var deg=Math.atan2(o.px, -o.py)*180/Math.PI;
@@ -1143,6 +1186,64 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     if(!fromCompass && compassActive) stopCompass();
   }
 
+  // Landmark: point the phone's top edge at a landmark and tap. We capture the
+  // smoothed compass bearing to that landmark. The dial then shows the landmark
+  // at the top; readings are stored as TRUE bearings (landmark + dial offset).
+  function setLandmark(){
+    if(typeof DeviceOrientationEvent === 'undefined'){
+      toast('No compass on this device'); return;
+    }
+    function grab(){
+      // Turn the compass on briefly to get a steady heading.
+      var captured=false;
+      smoothSin=null; smoothCos=null;
+      var handler = function(e){
+        var heading=null;
+        if(typeof e.webkitCompassHeading === 'number'){ heading=(e.webkitCompassHeading+180)%360; }
+        else if(typeof e.alpha === 'number'){ heading=(360-e.alpha)%360; }
+        if(heading===null) return;
+        var rad=heading*Math.PI/180, s=Math.sin(rad), c=Math.cos(rad);
+        if(smoothSin===null){ smoothSin=s; smoothCos=c; }
+        else { smoothSin+=0.25*(s-smoothSin); smoothCos+=0.25*(c-smoothCos); }
+      };
+      window.addEventListener('deviceorientation', handler, true);
+      window.addEventListener('deviceorientationabsolute', handler, true);
+      toast('Hold steady, pointing at the landmark…');
+      setTimeout(function(){
+        window.removeEventListener('deviceorientation', handler, true);
+        window.removeEventListener('deviceorientationabsolute', handler, true);
+        if(smoothSin===null){ toast('Could not read compass — try again'); return; }
+        var bearing = Math.atan2(smoothSin, smoothCos)*180/Math.PI;
+        bearing = ((bearing%360)+360)%360;
+        state.landmark = bearing;
+        try{ localStorage.setItem('vjg_landmark', String(bearing)); }catch(e){}
+        updateLandmarkLabel();
+        drawDial();
+        toast('Landmark set ✓ — dial now points to it');
+      }, 1500);
+    }
+    if(typeof DeviceOrientationEvent.requestPermission === 'function'){
+      DeviceOrientationEvent.requestPermission().then(function(resp){
+        if(resp==='granted') grab(); else toast('Compass permission denied');
+      }).catch(function(){ toast('Compass not available'); });
+    } else { grab(); }
+  }
+  function clearLandmark(){
+    if(!confirm('Clear the landmark? The dial goes back to showing North at the top.')) return;
+    state.landmark = null;
+    try{ localStorage.removeItem('vjg_landmark'); }catch(e){}
+    updateLandmarkLabel();
+    drawDial();
+    toast('Landmark cleared');
+  }
+  function updateLandmarkLabel(){
+    var el = document.getElementById('landmarkLbl');
+    if(!el) return;
+    if(state.landmark===null || state.landmark===undefined){ el.style.display='none'; return; }
+    el.style.display='';
+    el.textContent = '⛰ Landmark set (dial top = landmark) · tap to clear';
+  }
+
   // ---------- compass ----------
   function useCompass(){
     if(compassActive){ stopCompass(); return; }
@@ -1159,6 +1260,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
   function startCompass(){
     compassActive=true;
+    smoothSin=null; smoothCos=null; lastShown=null;
     document.getElementById('compassBtn').classList.add('live');
     document.getElementById('compassBtn').textContent='● Compass live — tap to lock';
     window.addEventListener('deviceorientation', onOrient, true);
@@ -1171,19 +1273,54 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var b=document.getElementById('compassBtn');
     b.classList.remove('live'); b.textContent='⊕ Use phone compass';
   }
+  // Smoothing: angles can't be averaged directly (359 and 1 -> 180 wrongly),
+  // so we keep a running sin/cos average. This kills the Android flicker and
+  // steadies iPhone too. Also store the raw landmark-relative offset.
+  var smoothSin = null, smoothCos = null;
+  var SMOOTH = 0.15;  // lower = steadier (more lag), higher = snappier
+  var lastShown = null;
+
   function onOrient(e){
     var heading=null;
-    // Phone held flat, screen up, TOP EDGE pointed at the animal.
+    // Phone held flat, screen up, TOP EDGE pointed at the animal/landmark.
     if(typeof e.webkitCompassHeading === 'number'){
-      // iPhone: compass heading is the direction the top edge points. Correct as-is.
-      heading = e.webkitCompassHeading;
+      // iPhone: held flat with top edge toward target, raw reads opposite; +180.
+      heading = (e.webkitCompassHeading + 180) % 360;
     } else if(typeof e.alpha === 'number'){
-      // Android: alpha is rotation around the vertical axis. Held flat, the
-      // top-edge compass direction is (360 - alpha).
+      // Android: held flat, top-edge compass direction is (360 - alpha).
       heading = (360 - e.alpha) % 360;
     }
-    if(heading!==null){ setBearing(((heading%360)+360)%360, true); }
+    if(heading===null) return;
+    var rad = heading * Math.PI/180;
+    var s = Math.sin(rad), c = Math.cos(rad);
+    if(smoothSin===null){ smoothSin=s; smoothCos=c; }
+    else {
+      smoothSin = smoothSin + SMOOTH*(s-smoothSin);
+      smoothCos = smoothCos + SMOOTH*(c-smoothCos);
+    }
+    var sm = Math.atan2(smoothSin, smoothCos) * 180/Math.PI;
+    sm = ((sm%360)+360)%360;
+    // Apply landmark calibration if one is set (compass direction of landmark
+    // minus where the dial's landmark sits; keeps stored bearing absolute).
+    rawCompassHeading = sm;
+    var shown = applyLandmark(sm);
+    // Only redraw when it actually moved ~1°+, to avoid needle jitter.
+    if(lastShown===null || Math.abs(angleDiff(shown,lastShown))>=1){
+      lastShown = shown;
+      setBearing(shown, true);
+    }
   }
+  function angleDiff(a,b){
+    var d = ((a-b)%360+540)%360-180; return d;
+  }
+  // When a landmark is set, the dial's top represents the landmark. So a compass
+  // reading (absolute) is shown rotated by -landmark. setBearing stores the dial
+  // angle; we convert back to a true bearing at save time (see saveBuck).
+  function applyLandmark(absHeading){
+    if(state.landmark===null || state.landmark===undefined) return absHeading;
+    return ((absHeading - state.landmark)%360 + 360)%360;
+  }
+  var rawCompassHeading = 0;
 
   // ---------- GPS ----------
   function locateChair(){
@@ -1216,6 +1353,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     navigator.geolocation.getCurrentPosition(function(pos){
       state.chair={ lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
       state.chairSet = true;
+      try{ localStorage.setItem('vjg_chair', JSON.stringify(state.chair)); }catch(e){}
       updateChairBanner();
       mapFitted=false;
       renderAll();
@@ -1265,7 +1403,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // ---------- modal ----------
   function openLog(){
     if(!state.chairSet){
-      toast('First set your chair: open the "Active Hunt" tab and tap "⚲ Set my chair here"');
+      toast('First set your chair — tap "⚲ Set my chair here" on My radar');
       return;
     }
     setBearing(0,false);
@@ -1324,7 +1462,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var item={
       id: 'q'+Date.now()+'_'+Math.floor(Math.random()*1000),
       session: state.session || ('Hunt ' + (state.code||'')),
-      bearing: Math.round(state.bearing),
+      bearing: Math.round(trueBearing()),
       distance: document.getElementById('distance').value,
       notes: document.getElementById('notes').value,
       lat: state.chair ? state.chair.lat : '',
@@ -1438,7 +1576,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   // Pull the hunt's bucks via getGroup. The Active-Hunt map shows everyone;
   // My radar shows only MY bucks. getGroup is proven reliable (the map works).
-  function refreshFromGroup(){
+  function refreshFromGroup(showToast){
     if(!state.code) return;
     google.script.run
       .withSuccessHandler(function(res){
@@ -1462,8 +1600,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         renderAll();
         renderGroup();
         updatePendingBadge();
+        if(showToast) toast('Updated');
       })
-      .withFailureHandler(function(){})
+      .withFailureHandler(function(){ if(showToast) toast('Check reception'); })
       .getGroup(state.code);
   }
 
@@ -1556,7 +1695,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     document.getElementById('setupOverlay').classList.remove('show');
     if(state.view==='all') refreshGroup(true);
     if(!state.chairSet && !state.ended){
-      setTimeout(function(){ toast('When you reach your spot, open "Active Hunt" and tap "Set my chair here"'); }, 600);
+      setTimeout(function(){ toast('When you reach your spot, tap "Set my chair here" on My radar'); }, 600);
     }
   }
 
@@ -1626,15 +1765,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
   function refreshGroup(showToast){
     if(!state.code){ openSetup(); return; }
-    google.script.run
-      .withSuccessHandler(function(res){
-        if(!res || !res.ok){ if(showToast) toast('Could not load group'); return; }
-        lastGroup = { hunters: res.hunters||[], bucks: res.bucks||[] };
-        renderGroup();
-        if(showToast) toast('Updated');
-      })
-      .withFailureHandler(function(e){ if(showToast) toast('Check reception'); console.error(e); })
-      .getGroup(state.code);
+    refreshFromGroup(showToast);
   }
 
   // Stable color per hunter name
@@ -1676,27 +1807,47 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var dist = b.distance ? (b.distance+' m') : '—';
       var notes = b.notes ? ' · '+esc(b.notes) : '';
       var coords = (b.buckLat!=='' && b.buckLng!=='')
-        ? '<button class="copybtn" onclick="navigateTo('+b.buckLat+','+b.buckLng+')">▶ Go</button>' : '';
+        ? '<button class="copybtn" onclick="event.stopPropagation();navigateTo('+b.buckLat+','+b.buckLng+')">▶ Go</button>' : '';
       var tick = '<button class="tickbtn'+(b.collected?' done':'')+'" '
-        + 'onclick="toggleCollected('+b.row+','+(b.collected?'false':'true')+')">'
+        + 'onclick="event.stopPropagation();toggleCollected(\''+b.row+'\','+(b.collected?'false':'true')+')">'
         + (b.collected?'✓':'○')+'</button>';
-      // Edit/delete only on MY own bucks, and only in the live (not past/ended) hunt.
       var mine = !viewingPastCode && state.name &&
                  (b.hunter||'').toLowerCase() === state.name.toLowerCase();
       var editbtns = mine
-        ? '<button class="copybtn" onclick="openEditBuck('+b.row+')">Edit</button>'
+        ? '<button class="copybtn" onclick="event.stopPropagation();openEditBuck(\''+b.row+'\')">Edit</button>'
         : '';
-      rows.push('<div class="item'+(b.collected?' collected':'')+'">'
+      // Expandable detail panel (hidden until the row is tapped).
+      var time = (''+b.timestamp).split(' ')[1] || '';
+      var gps = (b.buckLat!=='' && b.buckLng!=='')
+        ? (Number(b.buckLat).toFixed(5)+', '+Number(b.buckLng).toFixed(5)) : 'no GPS';
+      var detail = '<div class="bokdetail" id="detail_'+b.row+'" style="display:none;">'
+        + '<div><span>Hunter</span>'+esc(b.hunter||'—')+'</div>'
+        + '<div><span>Direction</span>'+Math.round(Number(b.bearing)||0)+'° '+compassName(Number(b.bearing)||0)+'</div>'
+        + '<div><span>Distance</span>'+(b.distance?(b.distance+' m'):'—')+'</div>'
+        + '<div><span>Notes</span>'+(b.notes?esc(b.notes):'—')+'</div>'
+        + '<div><span>Time</span>'+(time?time.substring(0,5):'—')+'</div>'
+        + '<div><span>GPS</span>'+gps+'</div>'
+        + '<div><span>Status</span>'+(b.collected?'picked up ✓':'not collected')+'</div>'
+        + '<div class="bokactions">'+coords+editbtns+'</div>'
+        + '</div>';
+      rows.push('<div class="item bokitem'+(b.collected?' collected':'')+'" onclick="toggleBuckDetail(\''+b.row+'\')">'
         + '<div class="badge" style="background:'+c+';color:#fff;">'+b.number+'</div>'
         + '<div class="meta"><div class="metatop">'+esc(b.hunter)+' · bok #'+b.number+' · '+dist+'</div>'
-        + '<div class="metabot">'+Math.round(Number(b.bearing)||0)+'°'+notes+'</div></div>'
-        + coords + editbtns + tick
-        + '</div>');
+        + '<div class="metabot">'+Math.round(Number(b.bearing)||0)+'°'+notes+' · tap for detail</div></div>'
+        + tick
+        + '</div>'
+        + detail);
     });
     }
 
     el.innerHTML = rows.length ? rows.join('') :
       '<div class="empty">No one has reported in yet on this code.</div>';
+  }
+
+  function toggleBuckDetail(row){
+    var d = document.getElementById('detail_'+row);
+    if(!d) return;
+    d.style.display = (d.style.display==='none' || !d.style.display) ? 'block' : 'none';
   }
 
   function copyCoords(lat,lng){
@@ -1717,7 +1868,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // then save to the server; revert if the save fails.
   function toggleCollected(row, makeCollected){
     var b = null;
-    for(var i=0;i<lastGroup.bucks.length;i++){ if(lastGroup.bucks[i].row===row){ b=lastGroup.bucks[i]; break; } }
+    for(var i=0;i<lastGroup.bucks.length;i++){ if(String(lastGroup.bucks[i].row)===String(row)){ b=lastGroup.bucks[i]; break; } }
     if(!b) return;
     b.collected = makeCollected;
     renderGroup();
@@ -1732,7 +1883,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // ---------- edit / delete buck ----------
   var editRow = null;
   function findBuckRow(row){
-    for(var i=0;i<lastGroup.bucks.length;i++){ if(lastGroup.bucks[i].row===row) return lastGroup.bucks[i]; }
+    for(var i=0;i<lastGroup.bucks.length;i++){ if(String(lastGroup.bucks[i].row)===String(row)) return lastGroup.bucks[i]; }
     return null;
   }
   function openEditBuck(row){
@@ -1967,13 +2118,37 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var day = (''+hu.first).split(' ')[0] || '';
       var current = (hu.code === state.code) ? ' · current' : '';
       rows.push('<div class="item">'
+        + '<input type="checkbox" class="histcheck" value="'+esc(hu.code)+'" onclick="event.stopPropagation()" style="width:22px;height:22px;flex:none;accent-color:var(--accent);">'
         + '<div class="badge" style="background:var(--accent);color:#fff;cursor:pointer;" onclick="viewHunt(\''+esc(hu.code)+'\')">'+hu.count+'</div>'
         + '<div class="meta" style="cursor:pointer;" onclick="viewHunt(\''+esc(hu.code)+'\')"><div class="metatop">'+esc(hu.code)+current+'</div>'
         + '<div class="metabot">'+day+' · '+esc(hu.hunters||'')+'</div></div>'
-        + '<button class="copybtn" style="background:#5a1f1f;color:#fff;" onclick="deleteHuntPrompt(\''+esc(hu.code)+'\')">Delete</button>'
         + '</div>');
     });
-    el.innerHTML = rows.join('');
+    el.innerHTML = rows.join('')
+      + '<button class="ghost" style="width:100%;margin-top:12px;background:#5a1f1f;color:#fff;border-color:#7a2a2a;" onclick="deleteSelectedHunts()">🗑 Delete selected hunts</button>';
+  }
+
+  // Delete every checked hunt, asking for the PIN once.
+  function deleteSelectedHunts(){
+    var boxes = document.querySelectorAll('.histcheck:checked');
+    if(!boxes.length){ toast('Tick the hunts you want to delete first'); return; }
+    var codes = []; for(var i=0;i<boxes.length;i++){ codes.push(boxes[i].value); }
+    var pin = prompt('Enter PIN to delete '+codes.length+' hunt'+(codes.length===1?'':'s')+'. This cannot be undone.');
+    if(pin===null) return;
+    toast('Deleting '+codes.length+'…');
+    var done=0, failed=0;
+    function next(i){
+      if(i>=codes.length){
+        toast(done+' deleted'+(failed?(', '+failed+' failed'):''));
+        openHistory();
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(res){ if(res&&res.ok) done++; else failed++; next(i+1); })
+        .withFailureHandler(function(){ failed++; next(i+1); })
+        .deleteHunt({ code: codes[i], pin: pin });
+    }
+    next(0);
   }
 
   function deleteHuntPrompt(code){
@@ -2032,7 +2207,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         // Log out of the ended hunt entirely — clear identity, stop polling,
         // and drop to the home (choose) screen. The hunt is now view-only.
         stopPolling();
-        try{ localStorage.removeItem('vjg_code'); localStorage.removeItem('vjg_huntname'); }catch(e){}
+        try{ localStorage.removeItem('vjg_code'); localStorage.removeItem('vjg_huntname'); localStorage.removeItem('vjg_chair'); }catch(e){}
+        state.chair=null; state.chairSet=false;
         state.code=''; state.huntName=''; state.session=null;
         state.count=0; state.bucks=[]; lastGroup={hunters:[],bucks:[]};
         renderWhoami(); renderAll();
