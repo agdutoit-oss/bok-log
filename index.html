@@ -477,6 +477,24 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
     </div>
   </div>
 
+  <!-- ===== GPS accuracy modal ===== -->
+  <div class="overlay" id="gpsOverlay">
+    <div class="sheet">
+      <h3 id="gpsTitle">Getting GPS fix…</h3>
+      <div class="hint" style="margin-bottom:10px;">Wait for the accuracy to tighten before pinning. In the open it usually reaches under 10 m.</div>
+      <div style="text-align:center; margin:18px 0;">
+        <div id="gpsAccNum" style="font-size:46px; font-weight:700; line-height:1; color:var(--accent2);">—</div>
+        <div style="font-size:13px; color:var(--muted); margin-top:4px;">accuracy (smaller is better)</div>
+        <div id="gpsAccBar" style="height:8px; border-radius:4px; background:#5a1f1f; margin:14px 0 4px; transition:.3s;"></div>
+        <div id="gpsAccMsg" style="font-size:13px; color:var(--muted);">Searching…</div>
+      </div>
+      <div class="actions">
+        <button class="cancel" onclick="cancelGps()">Cancel</button>
+        <button class="save" id="gpsPinBtn" onclick="acceptGps()" style="opacity:.5;">Pin here</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== PIN modal (numeric) ===== -->
   <div class="overlay" id="pinOverlay">
     <div class="sheet">
@@ -1413,10 +1431,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   // ---------- GPS ----------
   function locateChair(){
+    if(state.chairSet) return;   // don't clobber an accurate chair already set
     if(!navigator.geolocation){ gps('No GPS on device'); return; }
     navigator.geolocation.getCurrentPosition(function(pos){
+      if(state.chairSet) return;
       state.chair={ lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
-      gps('Chair GPS locked (±'+Math.round(pos.coords.accuracy)+' m)');
+      gps('GPS ±'+Math.round(pos.coords.accuracy)+' m — tap Set chair to pin');
     }, function(){ gps('GPS unavailable'); },
     { enableHighAccuracy:true, timeout:10000, maximumAge:60000 });
   }
@@ -1434,32 +1454,83 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       });
   }
 
-  // Set (or move) my chair: reads current GPS (works offline — satellites, not
-  // signal), marks chair set immediately, then sends now or queues to sync later.
+  // Set (or move) my chair, but watch the GPS accuracy first so we don't pin a
+  // rough early fix. Shows live accuracy; only pins when it's tight enough.
+  var gpsWatchId = null, gpsBest = null, gpsAutoDone = false;
+  var GPS_GOOD = 10;   // metres: auto-pin at/under this
+  var GPS_OK   = 20;   // metres: allow manual pin at/under this
+
   function pingPosition(){
     if(!state.name || !state.code){ openSetup(); return; }
     if(!navigator.geolocation){ toast('No GPS on device'); return; }
-    toast('Getting your location…');
-    navigator.geolocation.getCurrentPosition(function(pos){
-      state.chair={ lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
-      state.chairSet = true;
-      try{ localStorage.setItem('vjg_chair', JSON.stringify(state.chair)); }catch(e){}
-      updateChairBanner();
-      mapFitted=false;
-      renderAll();
-      if(state.view==='all') renderMap();   // show my chair on the map right away
+    gpsBest = null; gpsAutoDone = false;
+    document.getElementById('gpsAccNum').textContent = '—';
+    document.getElementById('gpsAccMsg').textContent = 'Searching…';
+    document.getElementById('gpsAccBar').style.background = '#5a1f1f';
+    document.getElementById('gpsAccBar').style.width = '100%';
+    var btn = document.getElementById('gpsPinBtn');
+    btn.style.opacity = '.5'; btn.textContent = 'Pin here';
+    document.getElementById('gpsOverlay').classList.add('show');
 
-      // Remember the position so it syncs even with no signal.
-      queuePosition(state.chair);
-
-      if(navigator.onLine){
-        toast('Chair set ✓ — syncing');
-        syncPosition();
-      } else {
-        toast('Chair set offline ✓ — others will see it when you have signal');
+    gpsWatchId = navigator.geolocation.watchPosition(function(pos){
+      var acc = pos.coords.accuracy;
+      // Keep the best (lowest-accuracy-number) fix we've seen.
+      if(!gpsBest || acc < gpsBest.accuracy){
+        gpsBest = { lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:acc };
       }
-    }, function(){ toast('Could not get GPS — try again in the open'); },
-    { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+      var shown = Math.round(gpsBest.accuracy);
+      document.getElementById('gpsAccNum').textContent = '±'+shown+' m';
+      // Bar: green when good, amber when ok, red when poor.
+      var bar = document.getElementById('gpsAccBar');
+      var msg = document.getElementById('gpsAccMsg');
+      if(shown <= GPS_GOOD){
+        bar.style.background = 'var(--good)'; bar.style.width = '30%';
+        msg.textContent = 'Good fix — pinning…';
+        btn.style.opacity = '1';
+        if(!gpsAutoDone){ gpsAutoDone = true; acceptGps(); }
+      } else if(shown <= GPS_OK){
+        bar.style.background = '#d8b13a'; bar.style.width = '60%';
+        msg.textContent = 'Okay — or wait for it to tighten';
+        btn.style.opacity = '1';
+      } else {
+        bar.style.background = '#5a1f1f'; bar.style.width = '100%';
+        msg.textContent = 'Still settling — please wait…';
+        btn.style.opacity = '.5';
+      }
+    }, function(){
+      document.getElementById('gpsAccMsg').textContent = 'GPS unavailable — go to open sky';
+    }, { enableHighAccuracy:true, timeout:30000, maximumAge:0 });
+  }
+
+  function stopGpsWatch(){
+    if(gpsWatchId!==null){ navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId=null; }
+  }
+  function cancelGps(){
+    stopGpsWatch();
+    document.getElementById('gpsOverlay').classList.remove('show');
+  }
+  function acceptGps(){
+    if(!gpsBest){ toast('No GPS fix yet'); return; }
+    // Block manual accept if still poor.
+    if(Math.round(gpsBest.accuracy) > GPS_OK && !gpsAutoDone){
+      toast('Accuracy still poor — wait a bit'); return;
+    }
+    stopGpsWatch();
+    document.getElementById('gpsOverlay').classList.remove('show');
+    state.chair = { lat:gpsBest.lat, lng:gpsBest.lng, accuracy:gpsBest.accuracy };
+    state.chairSet = true;
+    try{ localStorage.setItem('vjg_chair', JSON.stringify(state.chair)); }catch(e){}
+    updateChairBanner();
+    mapFitted=false;
+    renderAll();
+    if(state.view==='all') renderMap();
+    queuePosition(state.chair);
+    if(navigator.onLine){
+      toast('Chair set ✓ (±'+Math.round(gpsBest.accuracy)+'m) — syncing');
+      syncPosition();
+    } else {
+      toast('Chair set offline ✓ (±'+Math.round(gpsBest.accuracy)+'m)');
+    }
   }
 
   // Latest chair position waiting to sync (only the newest matters).
@@ -1950,20 +2021,36 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function pinBuckHere(row){
     if(!navigator.geolocation){ toast('No GPS on device'); return; }
     if(!confirm('Pin this bok at your current location? You should be standing at the bok.')) return;
-    toast('Getting your GPS…');
-    navigator.geolocation.getCurrentPosition(function(pos){
+    toast('Getting a good GPS fix…');
+    var best = null, watchId = null, finished = false;
+    function finish(){
+      if(finished) return; finished = true;
+      if(watchId!==null) navigator.geolocation.clearWatch(watchId);
+      if(!best){ toast('Could not get GPS — try again in the open'); return; }
+      if(Math.round(best.accuracy) > 25){
+        if(!confirm('GPS is only ±'+Math.round(best.accuracy)+'m here. Pin anyway?')) return;
+      }
       google.script.run
         .withSuccessHandler(function(res){
           if(!res || !res.ok){ toast(res&&res.error?res.error:'Could not pin'); return; }
-          toast('Location pinned ✓');
-          expandedBucks[row] = true;   // keep the panel open after refresh
+          toast('Pinned ✓ (±'+Math.round(best.accuracy)+'m)');
+          expandedBucks[row] = true;
           refreshFromGroup();
         })
         .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
-        .pinBuckLocation({ code: state.code, row: row,
-          lat: pos.coords.latitude, lng: pos.coords.longitude });
-    }, function(){ toast('Could not get GPS — try again in the open'); },
-    { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+        .pinBuckLocation({ code: state.code, row: row, lat: best.lat, lng: best.lng });
+    }
+    watchId = navigator.geolocation.watchPosition(function(pos){
+      var acc = pos.coords.accuracy;
+      if(!best || acc < best.accuracy){
+        best = { lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:acc };
+      }
+      toast('GPS ±'+Math.round(best.accuracy)+'m…');
+      if(Math.round(best.accuracy) <= 10){ finish(); }   // good enough, stop early
+    }, function(){ finish(); },
+    { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+    // Hard stop after 12s — use the best we got by then.
+    setTimeout(finish, 12000);
   }
 
   var expandedBucks = {};   // row id -> true when its detail panel is open
