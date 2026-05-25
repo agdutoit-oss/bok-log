@@ -1306,7 +1306,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       smoothSin=null; smoothCos=null;
       var handler = function(e){
         var heading=null;
-        if(typeof e.webkitCompassHeading === 'number'){ heading=(e.webkitCompassHeading+180)%360; }
+        if(typeof e.webkitCompassHeading === 'number'){ heading=e.webkitCompassHeading; }
         else if(typeof e.alpha === 'number'){ heading=(360-e.alpha)%360; }
         if(heading===null) return;
         var rad=heading*Math.PI/180, s=Math.sin(rad), c=Math.cos(rad);
@@ -1391,8 +1391,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var heading=null;
     // Phone held flat, screen up, TOP EDGE pointed at the animal/landmark.
     if(typeof e.webkitCompassHeading === 'number'){
-      // iPhone: held flat with top edge toward target, raw reads opposite; +180.
-      heading = (e.webkitCompassHeading + 180) % 360;
+      // iPhone: webkitCompassHeading is the direction the top edge points.
+      heading = e.webkitCompassHeading;
     } else if(typeof e.alpha === 'number'){
       // Android: held flat, top-edge compass direction is (360 - alpha).
       heading = (360 - e.alpha) % 360;
