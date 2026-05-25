@@ -257,9 +257,19 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
     <div class="session" id="sessionLbl" style="display:none;">Loading…</div>
   </div>
 
-  <div class="whoami" id="whoami" onclick="openSetup()">
-    <span id="whoName">—</span> · <span id="whoCode">—</span> <span class="editlink">switch hunt</span>
+  <div class="whoami" id="whoami" style="display:flex; align-items:center; gap:10px;">
+    <img id="profilePic" onclick="pickProfilePic()" src="" alt=""
+         style="width:38px; height:38px; border-radius:50%; object-fit:cover; flex:none;
+                border:2px solid var(--accent2); cursor:pointer; display:none;">
+    <span id="profilePicAdd" onclick="pickProfilePic()"
+          style="width:38px; height:38px; border-radius:50%; flex:none; cursor:pointer;
+                 border:2px dashed var(--line); display:flex; align-items:center; justify-content:center;
+                 font-size:18px; color:var(--muted);">＋</span>
+    <div style="flex:1; min-width:0;" onclick="openSetup()">
+      <span id="whoName">—</span> · <span id="whoCode">—</span> <span class="editlink">switch hunt</span>
+    </div>
   </div>
+  <input id="profilePicInput" type="file" accept="image/*" style="display:none;" onchange="onProfilePicChosen(event)">
 
   <div class="toggle">
     <button id="tabMine" class="toggle-btn active" onclick="setView('mine')">My radar</button>
@@ -717,6 +727,7 @@ API.getGroup = function(code){
     psnap.forEach(function(d){
       var p = d.data();
       hunters.push({ hunter:p.hunter, updated:p.updated||'',
+        photo:p.photo||'',
         lat:(p.lat===undefined?'':p.lat), lng:(p.lng===undefined?'':p.lng) });
     });
     return bucksRef_(code).get();
@@ -748,7 +759,8 @@ API.updatePosition = function(data){
   return posRef_(code).doc(id).set({
     hunter: String(data.hunter), updated: nowStamp_(),
     lat: Number(data.lat), lng: Number(data.lng),
-    accuracy: data.accuracy===''?'':Number(data.accuracy)
+    accuracy: data.accuracy===''?'':Number(data.accuracy),
+    photo: data.photo || ''
   }).then(function(){ return { ok:true }; });
 };
 
@@ -919,7 +931,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   // ---------- state ----------
   var state = { session:null, count:0, bucks:[], bearing:0, chair:null, chairSet:false,
-                landmark:null,
+                landmark:null, photo:'',
                 name:'', code:'', huntName:'', view:'mine' };
   var dialDragging = false;
   var compassActive = false;
@@ -940,6 +952,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       }
       var savedLm = localStorage.getItem('vjg_landmark');
       if(savedLm!==null && savedLm!==''){ state.landmark = Number(savedLm); }
+      state.photo = localStorage.getItem('vjg_photo') || '';
     }catch(e){}
   }
   function saveIdentity(name, code){
@@ -958,6 +971,48 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function renderWhoami(){
     document.getElementById('whoName').textContent = state.name || '—';
     document.getElementById('whoCode').textContent = state.huntName || state.code || '—';
+    var img = document.getElementById('profilePic');
+    var add = document.getElementById('profilePicAdd');
+    if(img && add){
+      if(state.photo){ img.src = state.photo; img.style.display=''; add.style.display='none'; }
+      else { img.style.display='none'; add.style.display='flex'; }
+    }
+  }
+
+  // ---- profile photo ----
+  function pickProfilePic(){
+    document.getElementById('profilePicInput').click();
+  }
+  function onProfilePicChosen(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var img = new Image();
+      img.onload = function(){
+        // Shrink to an 80x80 square (centre-cropped) so it stays tiny.
+        var S = 80;
+        var canvas = document.createElement('canvas');
+        canvas.width = S; canvas.height = S;
+        var ctx = canvas.getContext('2d');
+        var side = Math.min(img.width, img.height);
+        var sx = (img.width - side)/2, sy = (img.height - side)/2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, S, S);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        state.photo = dataUrl;
+        try{ localStorage.setItem('vjg_photo', dataUrl); }catch(_){}
+        renderWhoami();
+        // Push to the hunter's record so it shows on the group map/list.
+        if(state.code && state.name && state.chair){
+          queuePosition(state.chair);
+          if(navigator.onLine){ syncPosition(); }
+        }
+        toast(navigator.onLine ? 'Profile photo set ✓' : 'Photo set ✓ — syncs when online');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';   // allow re-picking the same file later
   }
 
   // Hide the Log button (and the End-hunt option) when the hunt is view-only.
@@ -1374,7 +1429,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       .withFailureHandler(function(e){ console.error(e); })
       .updatePosition({
         code: state.code, hunter: state.name,
-        lat: state.chair.lat, lng: state.chair.lng, accuracy: state.chair.accuracy
+        lat: state.chair.lat, lng: state.chair.lng, accuracy: state.chair.accuracy,
+        photo: state.photo || ''
       });
   }
 
@@ -1411,7 +1467,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function queuePosition(chair){
     try{ localStorage.setItem(PKEY, JSON.stringify({
       code: state.code, hunter: state.name,
-      lat: chair.lat, lng: chair.lng, accuracy: chair.accuracy
+      lat: chair.lat, lng: chair.lng, accuracy: chair.accuracy,
+      photo: state.photo || ''
     })); }catch(e){}
     updatePendingBadge();
   }
@@ -1827,8 +1884,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       if(whoFilter==='me' && !isMine(h.hunter)) return;
       var c = colorFor(h.hunter);
       var t = (''+h.updated).split(' ')[1] || '';
+      var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
+      var badge = photo
+        ? '<img src="'+photo+'" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex:none;border:2px solid '+c+';">'
+        : '<div class="badge" style="background:'+c+';color:#fff;"><i style="font-style:normal">●</i></div>';
       rows.push('<div class="item">'
-        + '<div class="badge" style="background:'+c+';color:#fff;"><i style="font-style:normal">●</i></div>'
+        + badge
         + '<div class="meta"><div class="metatop">'+esc(h.hunter)+' · chair</div>'
         + '<div class="metabot">seen '+t.substring(0,5)+'</div></div>'
         + '</div>');
@@ -2084,11 +2145,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       if(whoFilter==='me' && !isMine(h.hunter)) return;
       var pos = { lat:Number(h.lat), lng:Number(h.lng) };
       shownNames[(h.hunter||'').toLowerCase()] = true;
-      mapMarkers.push(new google.maps.Marker({
-        map: map, position: pos, title: h.hunter+' (chair)',
-        label: { text: '\u25C6', color: '#fff', fontSize: '14px' },
-        icon: dotIcon(colorFor(h.hunter), 13)
-      }));
+      // Use my own freshest photo for my marker; otherwise the stored one.
+      var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
+      mapMarkers.push(makeHunterMarker(pos, h.hunter, photo));
       addNameTag(pos, h.hunter);
       bounds.extend(pos); any = true;
     });
@@ -2097,11 +2156,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     // even before my position has round-tripped through the server.
     if(state.chair && state.name && !shownNames[state.name.toLowerCase()]){
       var me = { lat:Number(state.chair.lat), lng:Number(state.chair.lng) };
-      mapMarkers.push(new google.maps.Marker({
-        map: map, position: me, title: state.name+' (you)',
-        label: { text: '\u25C6', color: '#fff', fontSize: '14px' },
-        icon: dotIcon(colorFor(state.name), 13)
-      }));
+      mapMarkers.push(makeHunterMarker(me, state.name+' (you)', state.photo));
       addNameTag(me, state.name);
       bounds.extend(me); any = true;
     }
@@ -2125,6 +2180,56 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
 
   // A simple colored circle marker icon (no external image, no AdvancedMarker).
+  // Build a chair marker: circular photo (with coloured ring) if the hunter has
+  // a profile pic, otherwise the plain coloured dot.
+  function makeHunterMarker(pos, title, photo){
+    var color = colorFor(title.replace(' (you)',''));
+    if(photo){
+      var icon = circlePhotoIcon(photo, color);
+      if(icon){
+        return new google.maps.Marker({ map:map, position:pos, title:title, icon:icon, zIndex:5 });
+      }
+    }
+    return new google.maps.Marker({
+      map: map, position: pos, title: title,
+      label: { text: '\u25C6', color: '#fff', fontSize: '14px' },
+      icon: dotIcon(color, 13)
+    });
+  }
+
+  // Renders a profile photo into a circular icon with a coloured ring.
+  // Cached per photo so we don't rebuild every refresh.
+  var _photoIconCache = {};
+  function circlePhotoIcon(photo, ring){
+    try{
+      var key = ring + '|' + photo.length + '|' + photo.substring(0,32);
+      if(_photoIconCache[key]) return _photoIconCache[key];
+      // We can't synchronously draw the loaded image (it loads async), so we
+      // build it once the image is ready and refresh the map then.
+      var imgObj = new Image();
+      imgObj.onload = function(){
+        var D = 44, canvas = document.createElement('canvas');
+        canvas.width = D; canvas.height = D;
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = ring;
+        ctx.beginPath(); ctx.arc(D/2, D/2, D/2, 0, Math.PI*2); ctx.fill();
+        ctx.save();
+        ctx.beginPath(); ctx.arc(D/2, D/2, D/2-3, 0, Math.PI*2); ctx.clip();
+        ctx.drawImage(imgObj, 3, 3, D-6, D-6);
+        ctx.restore();
+        _photoIconCache[key] = {
+          url: canvas.toDataURL('image/png'),
+          scaledSize: new google.maps.Size(44,44),
+          anchor: new google.maps.Point(22,22)
+        };
+        // Redraw so the freshly-built photo icon appears.
+        renderMap();
+      };
+      imgObj.src = photo;
+      return null;   // first pass: dot now, photo on next render
+    }catch(e){ return null; }
+  }
+
   function dotIcon(color, r){
     return {
       path: google.maps.SymbolPath.CIRCLE,
