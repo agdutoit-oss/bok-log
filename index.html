@@ -2295,19 +2295,21 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       // build it once the image is ready and refresh the map then.
       var imgObj = new Image();
       imgObj.onload = function(){
-        var D = 44, canvas = document.createElement('canvas');
-        canvas.width = D; canvas.height = D;
+        var D = 38, scale = 2, C = D*scale;
+        var canvas = document.createElement('canvas');
+        canvas.width = C; canvas.height = C;
         var ctx = canvas.getContext('2d');
-        ctx.fillStyle = ring;
-        ctx.beginPath(); ctx.arc(D/2, D/2, D/2, 0, Math.PI*2); ctx.fill();
         ctx.save();
-        ctx.beginPath(); ctx.arc(D/2, D/2, D/2-3, 0, Math.PI*2); ctx.clip();
-        ctx.drawImage(imgObj, 3, 3, D-6, D-6);
+        ctx.beginPath(); ctx.arc(C/2, C/2, C/2-scale, 0, Math.PI*2); ctx.clip();
+        ctx.drawImage(imgObj, scale, scale, C-2*scale, C-2*scale);
         ctx.restore();
+        ctx.lineWidth = scale;            // ~1px at display size = hairline
+        ctx.strokeStyle = ring;
+        ctx.beginPath(); ctx.arc(C/2, C/2, C/2-scale, 0, Math.PI*2); ctx.stroke();
         _photoIconCache[key] = {
           url: canvas.toDataURL('image/png'),
-          scaledSize: new google.maps.Size(44,44),
-          anchor: new google.maps.Point(22,22)
+          scaledSize: new google.maps.Size(D,D),
+          anchor: new google.maps.Point(D/2,D/2)
         };
         // Redraw so the freshly-built photo icon appears.
         renderMap();
@@ -2336,7 +2338,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       icon: {
         path: 'M 0,0 0,0',
         strokeOpacity: 0, fillOpacity: 0, scale: 1,
-        labelOrigin: new google.maps.Point(0, 22)
+        labelOrigin: new google.maps.Point(0, 26)
       },
       label: {
         text: name,
