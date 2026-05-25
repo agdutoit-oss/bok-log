@@ -2058,8 +2058,21 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var d = document.getElementById('detail_'+row);
     if(!d) return;
     var open = (d.style.display==='none' || !d.style.display);
-    d.style.display = open ? 'block' : 'none';
-    if(open){ expandedBucks[row] = true; } else { delete expandedBucks[row]; }
+    if(open){
+      // Close any other open detail panels first — only one open at a time.
+      for(var k in expandedBucks){
+        if(k!==row){
+          var other = document.getElementById('detail_'+k);
+          if(other) other.style.display='none';
+        }
+      }
+      expandedBucks = {};
+      d.style.display='block';
+      expandedBucks[row] = true;
+    } else {
+      d.style.display='none';
+      delete expandedBucks[row];
+    }
   }
 
   function copyCoords(lat,lng){
