@@ -265,9 +265,11 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
           style="width:38px; height:38px; border-radius:50%; flex:none; cursor:pointer;
                  border:2px dashed var(--line); display:flex; align-items:center; justify-content:center;
                  font-size:18px; color:var(--muted);">＋</span>
-    <div style="flex:1; min-width:0;" onclick="openSetup()">
-      <span id="whoName">—</span> · <span id="whoCode">—</span> <span class="editlink">switch hunt</span>
+    <div style="flex:1; min-width:0; line-height:1.2;">
+      <div style="font-size:14px; font-weight:600;" id="whoName">—</div>
+      <div style="font-size:12px; color:var(--muted);" id="whoStatus">Not in a hunt</div>
     </div>
+    <button id="leaveHuntBtn" class="copybtn" style="display:none; flex:none; background:#5a1f1f; color:#fff;" onclick="leaveHunt()">Leave</button>
   </div>
   <input id="profilePicInput" type="file" accept="image/*" style="display:none;" onchange="onProfilePicChosen(event)">
 
@@ -396,9 +398,32 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
     <div class="sheet">
 
       <!-- Stage 1: choose -->
-      <div id="stageChoose">
-        <h3>Bok Log</h3>
-        <div class="hint" style="margin-bottom:14px;">Start a new hunt, or join one you've been given a code for.</div>
+      <!-- Stage 0: profile setup (first time only) -->
+      <div id="stageProfile" style="display:none;">
+        <h3>Welcome to Bok Log</h3>
+        <div class="hint" style="margin-bottom:14px;">Set up your profile once — used in every hunt.</div>
+        <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:14px;">
+          <img id="profileSetupPic" src="" alt="" style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:2px solid var(--accent2); display:none; margin-bottom:8px;">
+          <span id="profileSetupAdd" style="width:90px; height:90px; border-radius:50%; border:2px dashed var(--line); display:flex; align-items:center; justify-content:center; font-size:32px; color:var(--muted); margin-bottom:8px; cursor:pointer;" onclick="pickProfilePic()">＋</span>
+          <span class="hint" onclick="pickProfilePic()" style="cursor:pointer; color:var(--accent2);">Add photo (optional)</span>
+        </div>
+        <div class="row">
+          <label class="fld">Your name</label>
+          <input id="profileName" type="text" placeholder="e.g. Arné" autocomplete="off">
+        </div>
+        <div class="actions">
+          <button class="save" style="width:100%;" onclick="saveProfile()">Continue</button>
+        </div>
+      </div>
+
+      <div id="stageChoose" style="display:none;">
+        <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:14px;">
+          <img id="chooseProfilePic" src="" alt="" style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:2px solid var(--accent2); display:none; margin-bottom:6px;">
+          <div style="font-size:18px; font-weight:700;" id="chooseProfileName">—</div>
+          <div class="hint" style="margin-top:2px;"><span style="color:var(--accent2); cursor:pointer;" onclick="showStage('profile')">edit profile</span></div>
+        </div>
+        <h3 style="text-align:center;">Not in any hunt</h3>
+        <div class="hint" style="margin-bottom:14px; text-align:center;">Start a new hunt, or join one you've been given a code for.</div>
         <div class="actions" style="flex-direction:column; gap:10px;">
           <button class="save" style="width:100%;" onclick="showStage('start')">Start a new hunt</button>
           <button class="cancel" style="width:100%;" onclick="showStage('join')">Join a hunt</button>
@@ -439,6 +464,14 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
         <div class="row">
           <label class="fld">Your name</label>
           <input id="joinName" type="text" placeholder="e.g. Kobus" autocomplete="off">
+        </div>
+        <div class="row">
+          <label class="fld">I am joining as</label>
+          <div style="display:flex; gap:8px;">
+            <button type="button" id="joinRoleHunter" class="ghost" style="flex:1; padding:14px; font-weight:600; border:2px solid var(--accent);" onclick="setJoinRole('hunter')">🎯 Hunter</button>
+            <button type="button" id="joinRoleDriver" class="ghost" style="flex:1; padding:14px; font-weight:600;" onclick="setJoinRole('driver')">🚙 Driver (pickup)</button>
+          </div>
+          <div class="hint">Drivers see only the map and can mark bokke as picked up.</div>
         </div>
         <div class="actions">
           <button class="cancel" onclick="showStage('choose')">Back</button>
@@ -745,7 +778,7 @@ API.getGroup = function(code){
     psnap.forEach(function(d){
       var p = d.data();
       hunters.push({ hunter:p.hunter, updated:p.updated||'',
-        photo:p.photo||'',
+        photo:p.photo||'', role:p.role||'hunter',
         lat:(p.lat===undefined?'':p.lat), lng:(p.lng===undefined?'':p.lng) });
     });
     return bucksRef_(code).get();
@@ -778,7 +811,8 @@ API.updatePosition = function(data){
     hunter: String(data.hunter), updated: nowStamp_(),
     lat: Number(data.lat), lng: Number(data.lng),
     accuracy: data.accuracy===''?'':Number(data.accuracy),
-    photo: data.photo || ''
+    photo: data.photo || '',
+    role: data.role || 'hunter'
   }).then(function(){ return { ok:true }; });
 };
 
@@ -949,7 +983,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   // ---------- state ----------
   var state = { session:null, count:0, bucks:[], bearing:0, chair:null, chairSet:false,
-                landmark:null, photo:'',
+                landmark:null, photo:'', role:'hunter',
                 name:'', code:'', huntName:'', view:'mine' };
   var dialDragging = false;
   var compassActive = false;
@@ -971,6 +1005,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var savedLm = localStorage.getItem('vjg_landmark');
       if(savedLm!==null && savedLm!==''){ state.landmark = Number(savedLm); }
       state.photo = localStorage.getItem('vjg_photo') || '';
+      state.role = localStorage.getItem('vjg_role') || 'hunter';
     }catch(e){}
   }
   function saveIdentity(name, code){
@@ -987,8 +1022,19 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     renderWhoami();
   }
   function renderWhoami(){
-    document.getElementById('whoName').textContent = state.name || '—';
-    document.getElementById('whoCode').textContent = state.huntName || state.code || '—';
+    document.getElementById('whoName').textContent = state.name || 'Set up your profile';
+    var status = document.getElementById('whoStatus');
+    var leave = document.getElementById('leaveHuntBtn');
+    if(state.code){
+      var label = state.huntName || state.code;
+      status.textContent = (state.role==='driver'?'🚙 In hunt (driver): ':'In hunt: ') + label;
+      status.style.color = 'var(--good)';
+      if(leave) leave.style.display = '';
+    } else {
+      status.textContent = 'Not in a hunt';
+      status.style.color = 'var(--muted)';
+      if(leave) leave.style.display = 'none';
+    }
     var img = document.getElementById('profilePic');
     var add = document.getElementById('profilePicAdd');
     if(img && add){
@@ -1034,6 +1080,52 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
 
   // Hide the Log button (and the End-hunt option) when the hunt is view-only.
+  // Role: 'hunter' (default) or 'driver' (sees only Active Hunt, can tick bokke).
+  var pendingJoinRole = 'hunter';
+  function setJoinRole(r){
+    pendingJoinRole = r;
+    var h = document.getElementById('joinRoleHunter');
+    var d = document.getElementById('joinRoleDriver');
+    if(!h||!d) return;
+    h.style.border = '2px solid '+(r==='hunter'?'var(--accent)':'var(--line)');
+    d.style.border = '2px solid '+(r==='driver'?'var(--accent)':'var(--line)');
+  }
+  // Apply the role to the UI: drivers see only the Active Hunt tab.
+  function applyRole(){
+    var driver = (state.role === 'driver');
+    var tm = document.getElementById('tabMine');
+    var ta = document.getElementById('tabAll');
+    if(tm) tm.style.display = driver ? 'none' : '';
+    if(ta){
+      ta.style.flex = driver ? '1 1 100%' : '';
+      ta.textContent = driver ? 'Hunt map (driver)' : 'Active Hunt';
+    }
+    if(driver){ setView('all'); }
+    var ids = ['setChairBtn','setLandmarkBtn','landmarkLbl','logBtn','syncBtn','pendingBadge','chairBanner'];
+    ids.forEach(function(id){ var el=document.getElementById(id); if(el) el.style.display = driver ? 'none' : el.style.display; });
+    var vm = document.getElementById('viewMine');
+    if(vm && driver) vm.style.display = 'none';
+    // Start (or stop) continuous driver tracking.
+    if(driver){ startDriverTracking(); } else { stopDriverTracking(); }
+  }
+
+  // Continuously push the driver's GPS so hunters see the vehicle moving.
+  var driverWatchId = null;
+  function startDriverTracking(){
+    if(driverWatchId!==null || !navigator.geolocation || !state.code || !state.name) return;
+    driverWatchId = navigator.geolocation.watchPosition(function(pos){
+      state.chair = { lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
+      state.chairSet = true;
+      try{ localStorage.setItem('vjg_chair', JSON.stringify(state.chair)); }catch(e){}
+      reportPosition();
+      if(state.view==='all') renderMap();
+    }, function(){ /* silent */ },
+    { enableHighAccuracy:true, maximumAge:5000, timeout:30000 });
+  }
+  function stopDriverTracking(){
+    if(driverWatchId!==null){ navigator.geolocation.clearWatch(driverWatchId); driverWatchId=null; }
+  }
+
   function applyEndedState(ended){
     state.ended = !!ended;
     var lb = document.getElementById('logBtn');
@@ -1065,6 +1157,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     drawDial();
     renderWhoami();
     updateLandmarkLabel();
+    applyRole();
     renderAll();              // draw the radar grid + empty list right away
     if(state.code){ refreshFromGroup(); }
     locateChair();
@@ -1450,7 +1543,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       .updatePosition({
         code: state.code, hunter: state.name,
         lat: state.chair.lat, lng: state.chair.lng, accuracy: state.chair.accuracy,
-        photo: state.photo || ''
+        photo: state.photo || '',
+        role: state.role || 'hunter'
       });
   }
 
@@ -1539,7 +1633,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     try{ localStorage.setItem(PKEY, JSON.stringify({
       code: state.code, hunter: state.name,
       lat: chair.lat, lng: chair.lng, accuracy: chair.accuracy,
-      photo: state.photo || ''
+      photo: state.photo || '',
+      role: state.role || 'hunter'
     })); }catch(e){}
     updatePendingBadge();
   }
@@ -1772,16 +1867,27 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   var pendingJoinCode = null, pendingHuntName = '';
 
   function openSetup(){
-    showStage('choose');
+    showStage(state.name ? 'choose' : 'profile');
     document.getElementById('setupOverlay').classList.add('show');
   }
   function showStage(which){
-    ['Choose','Start','Join','Created'].forEach(function(s){
+    ['Profile','Choose','Start','Join','Created'].forEach(function(s){
       document.getElementById('stage'+s).style.display =
         (s.toLowerCase()===which) ? '' : 'none';
     });
+    if(which==='profile'){
+      document.getElementById('profileName').value = state.name || '';
+      var img = document.getElementById('profileSetupPic');
+      var add = document.getElementById('profileSetupAdd');
+      if(state.photo){ img.src = state.photo; img.style.display=''; add.style.display='none'; }
+      else { img.style.display='none'; add.style.display='flex'; }
+    }
     if(which==='choose'){
-      // Only let them back out if they already have a hunt to return to.
+      // Show profile name + photo at the top of the home screen.
+      document.getElementById('chooseProfileName').textContent = state.name || 'Set up your profile';
+      var cp = document.getElementById('chooseProfilePic');
+      if(state.photo){ cp.src = state.photo; cp.style.display=''; }
+      else { cp.style.display='none'; }
       var canClose = !!(state.name && state.code);
       document.getElementById('keepHuntBtn').style.display = canClose ? '' : 'none';
     }
@@ -1791,6 +1897,48 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     if(which==='join'){
       document.getElementById('joinName').value = state.name || '';
     }
+  }
+
+  // First-time profile setup: just save name (+ photo if added).
+  // Leave the current hunt: clear hunt context (code, chair, landmark, role),
+  // keep the profile (name + photo) so re-joining is one tap.
+  function leaveHunt(){
+    if(!state.code) return;
+    if(!confirm('Leave this hunt? Your name and photo are kept; the hunt continues for everyone else.')) return;
+    stopPolling();
+    stopDriverTracking();
+    try{
+      localStorage.removeItem('vjg_code');
+      localStorage.removeItem('vjg_huntname');
+      localStorage.removeItem('vjg_chair');
+      localStorage.removeItem('vjg_landmark');
+      localStorage.removeItem('vjg_role');
+      localStorage.removeItem('vjg_queue');
+      localStorage.removeItem('vjg_pos');
+    }catch(e){}
+    state.code=''; state.huntName=''; state.session=null;
+    state.chair=null; state.chairSet=false;
+    state.landmark=null; state.role='hunter';
+    state.count=0; state.bucks=[]; lastGroup={hunters:[],bucks:[]};
+    applyEndedState(false);
+    applyRole();
+    renderWhoami();
+    updateLandmarkLabel();
+    drawDial();
+    renderAll();
+    if(state.view==='all') renderMap();
+    setView('mine');
+    toast('Left the hunt');
+    openSetup();
+  }
+
+  function saveProfile(){
+    var name = document.getElementById('profileName').value.trim();
+    if(!name){ toast('Please enter your name'); return; }
+    state.name = name;
+    try{ localStorage.setItem('vjg_name', name); }catch(e){}
+    renderWhoami();
+    showStage('choose');
   }
 
   // Close the setup popup, but only if a hunt is already set up (so a brand-new
@@ -1817,8 +1965,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         // Save identity: the join code becomes our active hunt code.
         pendingJoinCode = res.joinCode;
         pendingHuntName = res.huntName;
+        // Organizer is always a hunter (reset any previous driver role).
+        state.role = 'hunter';
+        try{ localStorage.setItem('vjg_role', 'hunter'); }catch(e){}
         saveIdentity(organizer, res.joinCode);
         saveHuntName(res.huntName);
+        applyRole();
         document.getElementById('createdName').textContent = res.huntName;
         document.getElementById('createdCode').textContent = res.joinCode;
         showStage('created');
@@ -1836,12 +1988,16 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     google.script.run
       .withSuccessHandler(function(res){
         if(!res || !res.ok){ toast(res&&res.error?res.error:'Could not join'); return; }
+        // Save the chosen role.
+        state.role = (pendingJoinRole === 'driver') ? 'driver' : 'hunter';
+        try{ localStorage.setItem('vjg_role', state.role); }catch(e){}
         saveIdentity(name, res.joinCode);
         saveHuntName(res.huntName);
         applyEndedState(res.status === 'ended');
+        applyRole();
         finishSetup();
         if(res.status==='ended'){ setView('all'); openSummary(res.joinCode); toast('This hunt has ended — view only'); }
-        else { toast('Joined: '+res.huntName); }
+        else { toast('Joined: '+res.huntName+(state.role==='driver'?' (driver)':'')); }
       })
       .withFailureHandler(function(e){ toast('Check reception'); console.error(e); })
       .joinHunt({ joinCode: code });
@@ -1956,12 +2112,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var c = colorFor(h.hunter);
       var t = (''+h.updated).split(' ')[1] || '';
       var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
+      var roleTag = (h.role==='driver') ? ' · 🚙 driver' : ' · chair';
       var badge = photo
         ? '<img src="'+photo+'" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex:none;border:2px solid '+c+';">'
         : '<div class="badge" style="background:'+c+';color:#fff;"><i style="font-style:normal">●</i></div>';
       rows.push('<div class="item">'
         + badge
-        + '<div class="meta"><div class="metatop">'+esc(h.hunter)+' · chair</div>'
+        + '<div class="meta"><div class="metatop">'+esc(h.hunter)+roleTag+'</div>'
         + '<div class="metabot">seen '+t.substring(0,5)+'</div></div>'
         + '</div>');
     });
@@ -2245,9 +2402,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       if(whoFilter==='me' && !isMine(h.hunter)) return;
       var pos = { lat:Number(h.lat), lng:Number(h.lng) };
       shownNames[(h.hunter||'').toLowerCase()] = true;
-      // Use my own freshest photo for my marker; otherwise the stored one.
       var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
-      mapMarkers.push(makeHunterMarker(pos, h.hunter, photo));
+      mapMarkers.push(makeHunterMarker(pos, h.hunter, photo, h.role||'hunter'));
       addNameTag(pos, h.hunter);
       bounds.extend(pos); any = true;
     });
@@ -2256,7 +2412,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     // even before my position has round-tripped through the server.
     if(state.chair && state.name && !shownNames[state.name.toLowerCase()]){
       var me = { lat:Number(state.chair.lat), lng:Number(state.chair.lng) };
-      mapMarkers.push(makeHunterMarker(me, state.name+' (you)', state.photo));
+      mapMarkers.push(makeHunterMarker(me, state.name+' (you)', state.photo, state.role||'hunter'));
       addNameTag(me, state.name);
       bounds.extend(me); any = true;
     }
@@ -2282,8 +2438,22 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // A simple colored circle marker icon (no external image, no AdvancedMarker).
   // Build a chair marker: circular photo (with coloured ring) if the hunter has
   // a profile pic, otherwise the plain coloured dot.
-  function makeHunterMarker(pos, title, photo){
-    var color = colorFor(title.replace(' (you)',''));
+  function makeHunterMarker(pos, title, photo, role){
+    var name = title.replace(' (you)','');
+    var color = colorFor(name);
+    if(role === 'driver'){
+      // Vehicle SVG marker — clear that this is the driver, not a chair.
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
+        + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+color+'" stroke-width="2"/>'
+        + '<text x="20" y="27" text-anchor="middle" font-size="22">🚙</text>'
+        + '</svg>';
+      var url = 'data:image/svg+xml;base64,' + btoa(svg);
+      return new google.maps.Marker({
+        map: map, position: pos, title: title+' (driver)',
+        icon: { url:url, scaledSize:new google.maps.Size(40,40), anchor:new google.maps.Point(20,20) },
+        zIndex: 6
+      });
+    }
     if(photo){
       var icon = circlePhotoIcon(photo, color);
       if(icon){
@@ -2501,8 +2671,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         // Log out of the ended hunt entirely — clear identity, stop polling,
         // and drop to the home (choose) screen. The hunt is now view-only.
         stopPolling();
-        try{ localStorage.removeItem('vjg_code'); localStorage.removeItem('vjg_huntname'); localStorage.removeItem('vjg_chair'); }catch(e){}
+        try{ localStorage.removeItem('vjg_code'); localStorage.removeItem('vjg_huntname'); localStorage.removeItem('vjg_chair'); localStorage.removeItem('vjg_role'); }catch(e){}
         state.chair=null; state.chairSet=false;
+        state.role='hunter';
         state.code=''; state.huntName=''; state.session=null;
         state.count=0; state.bucks=[]; lastGroup={hunters:[],bucks:[]};
         renderWhoami(); renderAll();
