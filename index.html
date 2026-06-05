@@ -258,10 +258,10 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
   </div>
 
   <div class="whoami" id="whoami" style="display:flex; align-items:center; gap:10px;">
-    <img id="profilePic" onclick="pickProfilePic()" src="" alt=""
+    <img id="profilePic" onclick="openProfileEdit()" src="" alt=""
          style="width:38px; height:38px; border-radius:50%; object-fit:cover; flex:none;
                 border:2px solid var(--accent2); cursor:pointer; display:none;">
-    <span id="profilePicAdd" onclick="pickProfilePic()"
+    <span id="profilePicAdd" onclick="openProfileEdit()"
           style="width:38px; height:38px; border-radius:50%; flex:none; cursor:pointer;
                  border:2px dashed var(--line); display:flex; align-items:center; justify-content:center;
                  font-size:18px; color:var(--muted);">＋</span>
@@ -403,16 +403,18 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
         <h3>Welcome to Bok Log</h3>
         <div class="hint" style="margin-bottom:14px;">Set up your profile once — used in every hunt.</div>
         <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:14px;">
-          <img id="profileSetupPic" src="" alt="" style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:2px solid var(--accent2); display:none; margin-bottom:8px;">
+          <img id="profileSetupPic" src="" alt="" onclick="pickProfilePic()" style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:2px solid var(--accent2); display:none; margin-bottom:8px; cursor:pointer;">
           <span id="profileSetupAdd" style="width:90px; height:90px; border-radius:50%; border:2px dashed var(--line); display:flex; align-items:center; justify-content:center; font-size:32px; color:var(--muted); margin-bottom:8px; cursor:pointer;" onclick="pickProfilePic()">＋</span>
-          <span class="hint" onclick="pickProfilePic()" style="cursor:pointer; color:var(--accent2);">Add photo (optional)</span>
+          <span id="profilePicAction" class="hint" onclick="pickProfilePic()" style="cursor:pointer; color:var(--accent2);">Add photo (optional)</span>
+          <span id="profilePicRemove" class="hint" onclick="removeProfilePic()" style="cursor:pointer; color:#a07070; margin-top:4px; display:none;">Remove photo</span>
         </div>
         <div class="row">
           <label class="fld">Your name</label>
           <input id="profileName" type="text" placeholder="e.g. Arné" autocomplete="off">
         </div>
         <div class="actions">
-          <button class="save" style="width:100%;" onclick="saveProfile()">Continue</button>
+          <button class="cancel" id="profileCancelBtn" style="display:none;" onclick="closeProfileEdit()">Cancel</button>
+          <button class="save" id="profileSaveBtn" style="width:100%;" onclick="saveProfile()">Continue</button>
         </div>
       </div>
 
@@ -1046,6 +1048,31 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // ---- profile photo ----
   function pickProfilePic(){
     document.getElementById('profilePicInput').click();
+  }
+  function openProfileEdit(){
+    showStage('profile');
+    document.getElementById('setupOverlay').classList.add('show');
+  }
+  function closeProfileEdit(){
+    if(state.code){ document.getElementById('setupOverlay').classList.remove('show'); }
+    else { showStage('choose'); }
+  }
+  function removeProfilePic(){
+    if(!state.photo) return;
+    if(!confirm('Remove your profile photo?')) return;
+    state.photo = '';
+    try{ localStorage.removeItem('vjg_photo'); }catch(_){}
+    renderWhoami();
+    // Re-render the profile setup if it's open.
+    if(document.getElementById('stageProfile').style.display !== 'none'){
+      showStage('profile');
+    }
+    // Push the cleared photo to the group.
+    if(state.code && state.name && state.chair){
+      queuePosition(state.chair);
+      if(navigator.onLine){ syncPosition(); }
+    }
+    toast('Photo removed');
   }
   function onProfilePicChosen(e){
     var file = e.target.files && e.target.files[0];
@@ -1879,8 +1906,24 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       document.getElementById('profileName').value = state.name || '';
       var img = document.getElementById('profileSetupPic');
       var add = document.getElementById('profileSetupAdd');
-      if(state.photo){ img.src = state.photo; img.style.display=''; add.style.display='none'; }
-      else { img.style.display='none'; add.style.display='flex'; }
+      var action = document.getElementById('profilePicAction');
+      var rm = document.getElementById('profilePicRemove');
+      if(state.photo){
+        img.src = state.photo; img.style.display=''; add.style.display='none';
+        if(action) action.textContent = 'Change photo';
+        if(rm) rm.style.display = '';
+      } else {
+        img.style.display='none'; add.style.display='flex';
+        if(action) action.textContent = 'Add photo (optional)';
+        if(rm) rm.style.display = 'none';
+      }
+      // If they already had a profile, this is an edit — show Cancel + 'Save'.
+      var existing = !!state.name;
+      var saveBtn = document.getElementById('profileSaveBtn');
+      var cancelBtn = document.getElementById('profileCancelBtn');
+      if(saveBtn) saveBtn.textContent = existing ? 'Save' : 'Continue';
+      if(cancelBtn) cancelBtn.style.display = existing ? '' : 'none';
+      if(saveBtn) saveBtn.style.width = existing ? '' : '100%';
     }
     if(which==='choose'){
       // Show profile name + photo at the top of the home screen.
@@ -1938,7 +1981,18 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     state.name = name;
     try{ localStorage.setItem('vjg_name', name); }catch(e){}
     renderWhoami();
-    showStage('choose');
+    // Push profile to the group so the new photo/name shows on everyone's view.
+    if(state.code && state.chair){
+      queuePosition(state.chair);
+      if(navigator.onLine){ syncPosition(); }
+    }
+    // If they're in a hunt, just close the modal and stay where they were.
+    if(state.code){
+      document.getElementById('setupOverlay').classList.remove('show');
+      toast('Profile saved');
+    } else {
+      showStage('choose');
+    }
   }
 
   // Close the setup popup, but only if a hunt is already set up (so a brand-new
