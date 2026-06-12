@@ -2139,12 +2139,18 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   var BUCK_ZOOM = 15;        // at/above this zoom, bucks may show; below, hidden
 
   function onToggleEveryone(){
-    whoFilter = document.getElementById('swEveryone').checked ? 'all' : 'me';
+    // Don't trust the checkbox's .checked property — iOS Safari can lie about
+    // it for CSS-styled toggles. Flip state ourselves and force the DOM to match.
+    whoFilter = (whoFilter === 'all') ? 'me' : 'all';
+    var sw = document.getElementById('swEveryone');
+    if(sw) sw.checked = (whoFilter === 'all');
     mapFitted = false;
     renderGroup();
   }
   function onToggleBucks(){
-    showBucks = document.getElementById('swBucks').checked;
+    showBucks = !showBucks;
+    var sw = document.getElementById('swBucks');
+    if(sw) sw.checked = showBucks;
     mapFitted = false;
     renderGroup();
   }
