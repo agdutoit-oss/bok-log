@@ -2483,10 +2483,14 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
     var diag = ['whoFilter='+whoFilter+' photoCache='+Object.keys(_photoIconCache).length];
     lastGroup.hunters.forEach(function(h){
-      if(h.lat===''||h.lng===''){ diag.push('SKIP '+h.hunter+':empty'); return; }
+      var lat = Number(h.lat), lng = Number(h.lng);
+      if(!isFinite(lat) || !isFinite(lng) || (lat===0 && lng===0)){
+        diag.push('SKIP '+h.hunter+':bad('+h.lat+','+h.lng+')');
+        return;
+      }
       if(whoFilter==='me' && !isMine(h.hunter)){ diag.push('SKIP '+h.hunter+':filter'); return; }
-      diag.push('DRAW '+h.hunter);
-      var pos = { lat:Number(h.lat), lng:Number(h.lng) };
+      diag.push('DRAW '+h.hunter+' '+lat.toFixed(3)+','+lng.toFixed(3));
+      var pos = { lat:lat, lng:lng };
       shownNames[(h.hunter||'').toLowerCase()] = true;
       var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
       mapMarkers.push(makeHunterMarker(pos, h.hunter, photo, h.role||'hunter'));
@@ -2512,9 +2516,10 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
     if(bucksVisible()){
     lastGroup.bucks.forEach(function(b){
-      if(b.buckLat===''||b.buckLng==='') return;
+      var blat = Number(b.buckLat), blng = Number(b.buckLng);
+      if(!isFinite(blat) || !isFinite(blng) || (blat===0 && blng===0)) return;
       if(whoFilter==='me' && !isMine(b.hunter)) return;
-      var pos = { lat:Number(b.buckLat), lng:Number(b.buckLng) };
+      var pos = { lat:blat, lng:blng };
       mapMarkers.push(new google.maps.Marker({
         map: map, position: pos,
         title: b.hunter+' bok #'+b.number+' ('+(b.distance||'?')+'m)'+(b.collected?' — collected':''),
