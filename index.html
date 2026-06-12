@@ -1139,20 +1139,49 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
 
   // Continuously push the driver's GPS so hunters see the vehicle moving.
+  // iOS Safari throttles watchPosition when the tab isn't active, so we also
+  // poll getCurrentPosition every 20s as a fallback — that one does fire even
+  // when the page is partly backgrounded, as long as the tab isn't fully suspended.
   var driverWatchId = null;
+  var driverPollTimer = null;
+  function pushDriverPos(pos){
+    state.chair = { lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
+    state.chairSet = true;
+    try{ localStorage.setItem('vjg_chair', JSON.stringify(state.chair)); }catch(e){}
+    reportPosition();
+    if(state.view==='all') renderMap();
+  }
   function startDriverTracking(){
     if(driverWatchId!==null || !navigator.geolocation || !state.code || !state.name) return;
-    driverWatchId = navigator.geolocation.watchPosition(function(pos){
-      state.chair = { lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy };
-      state.chairSet = true;
-      try{ localStorage.setItem('vjg_chair', JSON.stringify(state.chair)); }catch(e){}
-      reportPosition();
-      if(state.view==='all') renderMap();
-    }, function(){ /* silent */ },
-    { enableHighAccuracy:true, maximumAge:5000, timeout:30000 });
+    driverWatchId = navigator.geolocation.watchPosition(pushDriverPos,
+      function(){ /* silent */ },
+      { enableHighAccuracy:true, maximumAge:5000, timeout:30000 });
+    // Belt-and-braces poll for iOS throttling cases.
+    if(driverPollTimer) clearInterval(driverPollTimer);
+    driverPollTimer = setInterval(function(){
+      if(!state.code || state.role !== 'driver') return;
+      navigator.geolocation.getCurrentPosition(pushDriverPos, function(){}, {
+        enableHighAccuracy:true, maximumAge:10000, timeout:25000
+      });
+    }, 20000);
+    // Try to hold a wake lock so iOS doesn't sleep the GPS while the driver is on duty.
+    try {
+      if(navigator.wakeLock && !window._driverWakeLock){
+        navigator.wakeLock.request('screen').then(function(lock){
+          window._driverWakeLock = lock;
+        }).catch(function(){});
+      }
+    } catch(_){}
   }
   function stopDriverTracking(){
     if(driverWatchId!==null){ navigator.geolocation.clearWatch(driverWatchId); driverWatchId=null; }
+    if(driverPollTimer){ clearInterval(driverPollTimer); driverPollTimer=null; }
+    try {
+      if(window._driverWakeLock){
+        window._driverWakeLock.release().catch(function(){});
+        window._driverWakeLock = null;
+      }
+    } catch(_){}
   }
 
   function applyEndedState(ended){
