@@ -1124,9 +1124,68 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         }
       }
     }
-    if(c){
-      try { map.setCenter(c); } catch(_){}
+    if(!c) return;
+    try { map.setCenter(c); } catch(_){}
+    // Pick a zoom that keeps the furthest other hunter (or bok) within view.
+    // Since I'm centred, the radius I need to see is the max distance from me.
+    if(_mapHeadingTimer){   // only auto-zoom while live mode is on
+      var radius = farthestMarkerDistance(c);
+      if(radius > 0){
+        var z = zoomForRadius(radius);
+        try {
+          if(map.getZoom() !== z) map.setZoom(z);
+        } catch(_){}
+      }
     }
+  }
+  // Compute the great-circle distance in metres between two lat/lng points.
+  function haversine(a, b){
+    var R = 6371000;
+    var toRad = function(d){ return d*Math.PI/180; };
+    var dLat = toRad(b.lat - a.lat);
+    var dLng = toRad(b.lng - a.lng);
+    var lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+    var x = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+  }
+  // Maximum metres between centre c and any visible hunter/bok marker.
+  function farthestMarkerDistance(c){
+    var maxD = 0;
+    if(lastGroup){
+      (lastGroup.hunters||[]).forEach(function(h){
+        var lat = Number(h.lat), lng = Number(h.lng);
+        if(!isFinite(lat) || !isFinite(lng)) return;
+        if(whoFilter==='me' && !isMine(h.hunter)) return;
+        var d = haversine(c, {lat:lat, lng:lng});
+        if(d > maxD) maxD = d;
+      });
+      if(bucksVisible()){
+        (lastGroup.bucks||[]).forEach(function(b){
+          var blat = Number(b.buckLat), blng = Number(b.buckLng);
+          if(!isFinite(blat) || !isFinite(blng)) return;
+          if(whoFilter==='me' && !isMine(b.hunter)) return;
+          var d = haversine(c, {lat:blat, lng:blng});
+          if(d > maxD) maxD = d;
+        });
+      }
+    }
+    return maxD;
+  }
+  // Choose a Google Maps zoom level so a given radius (metres) fits within the
+  // map's visible half-width. Approx: metres-per-pixel at zoom z and latitude φ
+  // is 156543.03 * cos(φ) / 2^z. With ~180px half-viewport (with 80px padding
+  // for marker labels), the zoom that fits radius is:
+  //   z = log2(156543.03 * cos(φ) * 180 / radius)
+  function zoomForRadius(radius){
+    if(!radius || radius < 5) return 18;
+    var lat = (state.chair && Number(state.chair.lat)) || -30;
+    var halfPx = 180;     // approx usable half-width after marker label room
+    var z = Math.log2(156543.03 * Math.cos(lat*Math.PI/180) * halfPx / radius);
+    z = Math.floor(z);
+    if(z < 12) z = 12;
+    if(z > 19) z = 19;
+    return z;
   }
   // The map container is rotated by -mapHeading via CSS, so a marker drawn at
   // default orientation also visually rotates by -mapHeading. We counter that
