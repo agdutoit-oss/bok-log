@@ -2455,9 +2455,19 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     // don't double-draw ourselves once our ping comes back.
     var shownNames = {};
 
+    var diag = [];
     lastGroup.hunters.forEach(function(h){
-      if(h.lat===''||h.lng==='') return;
-      if(whoFilter==='me' && !isMine(h.hunter)) return;
+      if(h.lat===''||h.lng===''){
+        diag.push('SKIP '+h.hunter+': empty coords');
+        console.log('SKIPPED (empty coords)', h.hunter, h);
+        return;
+      }
+      if(whoFilter==='me' && !isMine(h.hunter)){
+        diag.push('SKIP '+h.hunter+': filter');
+        return;
+      }
+      diag.push('DRAW '+h.hunter+' '+h.lat+','+h.lng);
+      console.log('DRAW', h.hunter, h.lat, h.lng);
       var pos = { lat:Number(h.lat), lng:Number(h.lng) };
       shownNames[(h.hunter||'').toLowerCase()] = true;
       var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
@@ -2474,6 +2484,24 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       addNameTag(me, state.name);
       bounds.extend(me); any = true;
     }
+    // DIAG: show what the map saw on screen (so we can debug without devtools).
+    try {
+      var dEl = document.getElementById('mapMsg');
+      if(dEl){
+        dEl.textContent = 'DIAG (' + lastGroup.hunters.length + ' hunters): ' + diag.join(' | ');
+        dEl.style.display = 'block';
+        dEl.style.background = 'rgba(0,0,0,.85)';
+        dEl.style.color = '#fff';
+        dEl.style.fontSize = '11px';
+        dEl.style.padding = '6px 8px';
+        dEl.style.maxHeight = '90px';
+        dEl.style.overflow = 'auto';
+        dEl.style.top = 'auto';
+        dEl.style.bottom = '0';
+        dEl.style.left = '0';
+        dEl.style.right = '0';
+      }
+    } catch(_){}
 
     if(bucksVisible()){
     lastGroup.bucks.forEach(function(b){
