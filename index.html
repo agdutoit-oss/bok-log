@@ -2564,12 +2564,14 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // Renders a profile photo into a circular icon with a coloured ring.
   // Cached per photo so we don't rebuild every refresh.
   var _photoIconCache = {};
+  var _photoLoading = {};   // tracks in-flight loads so we don't duplicate
+  var _photoRerenderScheduled = false;
   function circlePhotoIcon(photo, ring){
     try{
       var key = ring + '|' + photo.length + '|' + photo.substring(0,32);
       if(_photoIconCache[key]) return _photoIconCache[key];
-      // We can't synchronously draw the loaded image (it loads async), so we
-      // build it once the image is ready and refresh the map then.
+      if(_photoLoading[key]) return null;   // already loading, don't start again
+      _photoLoading[key] = true;
       var imgObj = new Image();
       imgObj.onload = function(){
         var D = 38, scale = 2, C = D*scale;
@@ -2580,7 +2582,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         ctx.beginPath(); ctx.arc(C/2, C/2, C/2-scale, 0, Math.PI*2); ctx.clip();
         ctx.drawImage(imgObj, scale, scale, C-2*scale, C-2*scale);
         ctx.restore();
-        ctx.lineWidth = scale;            // ~1px at display size = hairline
+        ctx.lineWidth = scale;
         ctx.strokeStyle = ring;
         ctx.beginPath(); ctx.arc(C/2, C/2, C/2-scale, 0, Math.PI*2); ctx.stroke();
         _photoIconCache[key] = {
@@ -2588,11 +2590,17 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
           scaledSize: new google.maps.Size(D,D),
           anchor: new google.maps.Point(D/2,D/2)
         };
-        // Redraw so the freshly-built photo icon appears.
-        renderMap();
+        delete _photoLoading[key];
+        // Schedule ONE redraw after the current batch of loads, so multiple
+        // photos finishing in quick succession don't cause a render storm.
+        if(!_photoRerenderScheduled){
+          _photoRerenderScheduled = true;
+          setTimeout(function(){ _photoRerenderScheduled = false; renderMap(); }, 150);
+        }
       };
+      imgObj.onerror = function(){ delete _photoLoading[key]; };
       imgObj.src = photo;
-      return null;   // first pass: dot now, photo on next render
+      return null;
     }catch(e){ return null; }
   }
 
