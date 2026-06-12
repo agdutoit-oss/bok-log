@@ -1029,11 +1029,21 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     window.addEventListener('deviceorientation', onOrient, true);
     window.addEventListener('deviceorientationabsolute', onOrient, true);
     sizeMapForRotation(true);
+    // Lock map interaction: panning a rotated map is confusing because finger
+    // direction doesn't match map direction. Zoom-buttons still work.
+    try {
+      if(map){
+        map.setOptions({
+          gestureHandling: 'none',
+          draggable: false,
+          scrollwheel: false,
+          disableDoubleClickZoom: true,
+          keyboardShortcuts: false
+        });
+      }
+    } catch(_){}
     _mapHeadingTimer = setInterval(function(){
       if(!map || !mapReady) return;
-      // Always apply — even if heading is 0 — so the map stays oriented and
-      // recentred. (Previously we bailed if heading barely moved, which left
-      // the map view drifted off-centre.)
       if(Math.abs(angleDiff(rawCompassHeading, mapHeading)) >= 2){
         mapHeading = rawCompassHeading;
         applyMapRotation();
@@ -1045,10 +1055,22 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function stopLiveMap(){
     if(_mapHeadingTimer){ clearInterval(_mapHeadingTimer); _mapHeadingTimer=null; }
     mapHeading = 0;
-    var el = document.getElementById('map');
-    if(el){ el.style.transform = ''; el.style.transformOrigin = ''; }
+    var el = document.getElementById('mapRot');
+    if(el){ el.style.transform = ''; }
     sizeMapForRotation(false);
-    rotatePhotoMarkers();  // counter-rotation -> 0, photos look the same now
+    // Re-enable interaction.
+    try {
+      if(map){
+        map.setOptions({
+          gestureHandling: 'greedy',
+          draggable: true,
+          scrollwheel: true,
+          disableDoubleClickZoom: false,
+          keyboardShortcuts: true
+        });
+      }
+    } catch(_){}
+    rotatePhotoMarkers();
   }
   // Apply the current rotation to the map container. Negative because we want
   // the heading at the TOP — rotating the map by -heading places the heading
@@ -1118,21 +1140,25 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       if(m._photoKey){
         var entry = _photoIconCache[m._photoKey];
         if(entry){
-          try { m.setIcon(iconWithRotation(entry, mapHeading)); } catch(_){}
+          try { m.setIcon(iconWithRotation(entry, mapHeading, m._displayName)); } catch(_){}
         }
       } else if(m._driverColor){
         var col = m._driverColor;
-        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
-          + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+col+'" stroke-width="2"/>'
-          + '<g transform="rotate('+mapHeading+' 20 20)">'
-          + '<text x="20" y="27" text-anchor="middle" font-size="22">🚙</text>'
+        var dn = (m._displayName||'').replace(/[<>&]/g,'');
+        var W = 100, H = 70, cx = W/2, cy = 22;
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'
+          + '<g transform="rotate('+mapHeading+' '+cx+' '+cy+')">'
+          + '<circle cx="'+cx+'" cy="'+cy+'" r="18" fill="#1d2017" stroke="'+col+'" stroke-width="2"/>'
+          + '<text x="'+cx+'" y="'+(cy+7)+'" text-anchor="middle" font-size="22">🚙</text>'
+          + '<text x="'+cx+'" y="'+(cy+30)+'" text-anchor="middle" font-size="12" font-weight="700" '
+          +   'fill="#ffffff" stroke="#000000" stroke-width="3" paint-order="stroke">'+dn+'</text>'
           + '</g>'
           + '</svg>';
         try {
           m.setIcon({
             url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-            scaledSize: new google.maps.Size(40, 40),
-            anchor: new google.maps.Point(20, 20)
+            scaledSize: new google.maps.Size(W, H),
+            anchor: new google.maps.Point(cx, cy)
           });
         } catch(_){}
       }
@@ -2809,8 +2835,11 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var pos = { lat:lat, lng:lng };
       shownNames[(h.hunter||'').toLowerCase()] = true;
       var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
-      mapMarkers.push(makeHunterMarker(pos, h.hunter, photo, h.role||'hunter'));
-      addNameTag(pos, h.hunter);
+      var hm = makeHunterMarker(pos, h.hunter, photo, h.role||'hunter');
+      mapMarkers.push(hm);
+      // Photo markers already include the name in their SVG; only add a
+      // separate label for plain-dot fallback markers.
+      if(!hm._photoKey && !hm._driverColor) addNameTag(pos, h.hunter);
       bounds.extend(pos); any = true;
       } catch(err){ /* skip this hunter on error */ }
     });
@@ -2819,8 +2848,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     // even before my position has round-tripped through the server.
     if(state.chair && state.name && !shownNames[state.name.toLowerCase()]){
       var me = { lat:Number(state.chair.lat), lng:Number(state.chair.lng) };
-      mapMarkers.push(makeHunterMarker(me, state.name+' (you)', state.photo, state.role||'hunter'));
-      addNameTag(me, state.name);
+      var mm = makeHunterMarker(me, state.name+' (you)', state.photo, state.role||'hunter');
+      mapMarkers.push(mm);
+      if(!mm._photoKey && !mm._driverColor) addNameTag(me, state.name);
       bounds.extend(me); any = true;
     }
 
@@ -2861,29 +2891,34 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var color = colorFor(name);
     if(role === 'driver'){
       // Vehicle SVG marker — clear that this is the driver, not a chair.
-      // Counter-rotate the emoji so the vehicle stays upright when the map rotates.
-      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
-        + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+color+'" stroke-width="2"/>'
-        + '<g transform="rotate('+mapHeading+' 20 20)">'
-        + '<text x="20" y="27" text-anchor="middle" font-size="22">🚙</text>'
+      // Counter-rotate the emoji + name so they stay upright as the map turns.
+      var displayName = title.replace(' (you)','').replace(/[<>&]/g,'');
+      var W = 100, H = 70, cx = W/2, cy = 22;
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'
+        + '<g transform="rotate('+mapHeading+' '+cx+' '+cy+')">'
+        + '<circle cx="'+cx+'" cy="'+cy+'" r="18" fill="#1d2017" stroke="'+color+'" stroke-width="2"/>'
+        + '<text x="'+cx+'" y="'+(cy+7)+'" text-anchor="middle" font-size="22">🚙</text>'
+        + '<text x="'+cx+'" y="'+(cy+30)+'" text-anchor="middle" font-size="12" font-weight="700" '
+        +   'fill="#ffffff" stroke="#000000" stroke-width="3" paint-order="stroke">'+displayName+'</text>'
         + '</g>'
         + '</svg>';
       var url = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
       var dmarker = new google.maps.Marker({
         map: map, position: pos, title: title+' (driver)',
-        icon: { url:url, scaledSize:new google.maps.Size(40,40), anchor:new google.maps.Point(20,20) },
+        icon: { url:url, scaledSize:new google.maps.Size(W,H), anchor:new google.maps.Point(cx, cy) },
         zIndex: 6
       });
       dmarker._driverColor = color;
+      dmarker._displayName = displayName;
       return dmarker;
     }
     if(photo){
-      var icon = circlePhotoIcon(photo, color);
+      var displayName = title.replace(' (you)','');
+      var icon = circlePhotoIcon(photo, color, displayName);
       if(icon){
         var marker = new google.maps.Marker({ map:map, position:pos, title:title, icon:icon, zIndex:5 });
-        // Remember which cache entry this marker uses so rotatePhotoMarkers
-        // can later swap the icon with an updated rotation.
         marker._photoKey = color + '|' + photo.length + '|' + photo.substring(0,32);
+        marker._displayName = displayName;
         return marker;
       }
     }
@@ -2900,10 +2935,10 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   var _photoIconCache = {};   // key -> { dataUrl (base for img), ring }
   var _photoLoading = {};
   var _photoRerenderScheduled = false;
-  function circlePhotoIcon(photo, ring){
+  function circlePhotoIcon(photo, ring, name){
     try{
       var key = ring + '|' + photo.length + '|' + photo.substring(0,32);
-      if(_photoIconCache[key]) return iconWithRotation(_photoIconCache[key], mapHeading);
+      if(_photoIconCache[key]) return iconWithRotation(_photoIconCache[key], mapHeading, name);
       if(_photoLoading[key]) return null;
       _photoLoading[key] = true;
       var imgObj = new Image();
@@ -2933,18 +2968,26 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // Build a Google-Maps marker icon from a cached photo + a rotation angle.
   // Counter-rotates the photo content so the face stays upright while the map
   // rotates underneath it. The wrapper SVG itself is map-aligned.
-  function iconWithRotation(entry, deg){
-    var D = 38;
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+D+'" height="'+D+'" viewBox="0 0 '+D+' '+D+'">'
-            + '<g transform="rotate('+deg+' '+(D/2)+' '+(D/2)+')">'
-            + '<image href="'+entry.png+'" x="0" y="0" width="'+D+'" height="'+D+'"/>'
-            + '<circle cx="'+(D/2)+'" cy="'+(D/2)+'" r="'+(D/2-1)+'" fill="none" stroke="'+entry.ring+'" stroke-width="2"/>'
+  // Build a Google-Maps marker icon: circular photo + hunter name below.
+  // Both the photo and the name sit inside a single rotation group so they
+  // counter-rotate together when the map heading changes, staying upright.
+  function iconWithRotation(entry, deg, name){
+    var D = 38, W = 100, H = 60;   // wider than tall to fit the name
+    var cx = W/2, cy = D/2 + 2;
+    var nm = (name||'').replace(/[<>&]/g,'');
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'
+            + '<g transform="rotate('+deg+' '+cx+' '+cy+')">'
+            + '<image href="'+entry.png+'" x="'+(cx-D/2)+'" y="'+(cy-D/2)+'" width="'+D+'" height="'+D+'"/>'
+            + '<circle cx="'+cx+'" cy="'+cy+'" r="'+(D/2-1)+'" fill="none" stroke="'+entry.ring+'" stroke-width="2"/>'
+            + '<text x="'+cx+'" y="'+(cy+D/2+13)+'" text-anchor="middle" font-size="12" font-weight="700" '
+            +   'fill="#ffffff" stroke="#000000" stroke-width="3" paint-order="stroke">'+nm+'</text>'
             + '</g>'
             + '</svg>';
     return {
       url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-      scaledSize: new google.maps.Size(D, D),
-      anchor: new google.maps.Point(D/2, D/2)
+      scaledSize: new google.maps.Size(W, H),
+      // Anchor the marker on the photo centre (so the photo sits at the GPS pos).
+      anchor: new google.maps.Point(cx, cy)
     };
   }
 
