@@ -1185,10 +1185,34 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       }
     }
     if(!c) return;
-    try { map.setCenter(c); } catch(_){}
-    // Fixed close-in zoom — readable and shows your immediate area. Use
-    // pinch-zoom or Fit all to see further out.
-    try { map.setZoom(17); } catch(_){}
+    // Build a SYMMETRIC bounds box around me: my position ± the farthest
+    // visible marker's distance in lat/lng. fitBounds then picks the zoom
+    // that fits this box, and because the box is centred on me, I end up
+    // in the middle of the viewport.
+    var maxDLat = 0, maxDLng = 0;
+    (lastGroup && lastGroup.hunters || []).forEach(function(h){
+      var lat = Number(h.lat), lng = Number(h.lng);
+      if(!isFinite(lat) || !isFinite(lng)) return;
+      if(whoFilter==='me' && !isMine(h.hunter)) return;
+      maxDLat = Math.max(maxDLat, Math.abs(lat - c.lat));
+      maxDLng = Math.max(maxDLng, Math.abs(lng - c.lng));
+    });
+    if(bucksVisible()){
+      (lastGroup && lastGroup.bucks || []).forEach(function(b){
+        var blat = Number(b.buckLat), blng = Number(b.buckLng);
+        if(!isFinite(blat) || !isFinite(blng)) return;
+        if(whoFilter==='me' && !isMine(b.hunter)) return;
+        maxDLat = Math.max(maxDLat, Math.abs(blat - c.lat));
+        maxDLng = Math.max(maxDLng, Math.abs(blng - c.lng));
+      });
+    }
+    // If no other markers, pick a small default box (~100m radius).
+    if(maxDLat===0 && maxDLng===0){ maxDLat = 0.0009; maxDLng = 0.0009; }
+    var bounds = new google.maps.LatLngBounds(
+      { lat: c.lat - maxDLat, lng: c.lng - maxDLng },
+      { lat: c.lat + maxDLat, lng: c.lng + maxDLng }
+    );
+    try { map.fitBounds(bounds, 60); } catch(_){}
   }
   // Compute the great-circle distance in metres between two lat/lng points.
   function haversine(a, b){
