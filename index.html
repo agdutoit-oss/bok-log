@@ -777,8 +777,15 @@ API.saveBuck = function(data){
 
 API.getGroup = function(code){
   code = codeUp_(code);
-  var hunters = [], bucks = [];
-  return posRef_(code).get().then(function(psnap){
+  var hunters = [], bucks = [], status = 'open', huntName = '';
+  return huntRef_(code).get().then(function(hdoc){
+    if(hdoc.exists){
+      var hd = hdoc.data() || {};
+      status = hd.status || 'open';
+      huntName = hd.huntName || '';
+    }
+    return posRef_(code).get();
+  }).then(function(psnap){
     psnap.forEach(function(d){
       var p = d.data();
       hunters.push({ hunter:p.hunter, updated:p.updated||'',
@@ -801,7 +808,7 @@ API.getGroup = function(code){
       });
     });
     bucks.sort(function(a,b){ return (a.number||0)-(b.number||0); });
-    return { ok:true, hunters:hunters, bucks:bucks };
+    return { ok:true, hunters:hunters, bucks:bucks, status:status, huntName:huntName };
   });
 };
 
@@ -1904,6 +1911,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     google.script.run
       .withSuccessHandler(function(res){
         if(!res || !res.ok) return;
+        // If the hunt was ended by the organizer, auto-leave on every hunter's
+        // phone so they don't keep logging against a closed hunt. Their
+        // profile (name + photo) stays so re-joining is one tap.
+        if(res.status === 'ended'){
+          autoLeaveOnEnd(res.huntName || state.huntName);
+          return;
+        }
         lastGroup = { hunters: res.hunters||[], bucks: res.bucks||[] };
         var myname = (state.name||'').toLowerCase().trim();
         var pending = (state.bucks||[]).filter(function(b){ return b.pending; });
@@ -1984,6 +1998,39 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // First-time profile setup: just save name (+ photo if added).
   // Leave the current hunt: clear hunt context (code, chair, landmark, role),
   // keep the profile (name + photo) so re-joining is one tap.
+  // Called when polling detects the hunt has been ended by the organizer.
+  // Cleans up like leaveHunt but with a different message and no confirm.
+  function autoLeaveOnEnd(huntName){
+    if(!state.code) return;
+    var endedCode = state.code;
+    stopPolling();
+    stopDriverTracking();
+    try{
+      localStorage.removeItem('vjg_code');
+      localStorage.removeItem('vjg_huntname');
+      localStorage.removeItem('vjg_chair');
+      localStorage.removeItem('vjg_landmark');
+      localStorage.removeItem('vjg_role');
+      localStorage.removeItem('vjg_queue');
+      localStorage.removeItem('vjg_pos');
+    }catch(e){}
+    state.code=''; state.huntName=''; state.session=null;
+    state.chair=null; state.chairSet=false;
+    state.landmark=null; state.role='hunter';
+    state.count=0; state.bucks=[]; lastGroup={hunters:[],bucks:[]};
+    applyEndedState(false);
+    applyRole();
+    renderWhoami();
+    updateLandmarkLabel();
+    drawDial();
+    renderAll();
+    if(state.view==='all') renderMap();
+    setView('mine');
+    toast((huntName ? '"'+huntName+'" ' : 'The hunt ') + 'has ended');
+    // Show them the final summary so they get closure on the hunt.
+    openSummary(endedCode);
+  }
+
   function leaveHunt(){
     if(!state.code) return;
     if(!confirm('Leave this hunt? Your name and photo are kept; the hunt continues for everyone else.')) return;
