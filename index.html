@@ -1029,19 +1029,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     window.addEventListener('deviceorientation', onOrient, true);
     window.addEventListener('deviceorientationabsolute', onOrient, true);
     sizeMapForRotation(true);
-    // Lock map interaction: panning a rotated map is confusing because finger
-    // direction doesn't match map direction. Zoom-buttons still work.
-    try {
-      if(map){
-        map.setOptions({
-          gestureHandling: 'none',
-          draggable: false,
-          scrollwheel: false,
-          disableDoubleClickZoom: true,
-          keyboardShortcuts: false
-        });
-      }
-    } catch(_){}
+    // Keep gestures enabled — the user wants to zoom and pan. Pan direction
+    // may feel inverted when the map is rotated, but that's a tradeoff worth
+    // accepting; the alternative (locking gestures) is worse.
     _mapHeadingTimer = setInterval(function(){
       if(!map || !mapReady) return;
       if(Math.abs(angleDiff(rawCompassHeading, mapHeading)) >= 2){
@@ -1049,7 +1039,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         applyMapRotation();
         rotatePhotoMarkers();
       }
-      recentreOnMe();
+      // No auto-recentre, no auto-zoom — the user controls those. Tap
+      // "Fit all" to recentre/zoom on demand.
     }, 200);
   }
   function stopLiveMap(){
@@ -1058,18 +1049,6 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var el = document.getElementById('mapRot');
     if(el){ el.style.transform = ''; }
     sizeMapForRotation(false);
-    // Re-enable interaction.
-    try {
-      if(map){
-        map.setOptions({
-          gestureHandling: 'greedy',
-          draggable: true,
-          scrollwheel: true,
-          disableDoubleClickZoom: false,
-          keyboardShortcuts: true
-        });
-      }
-    } catch(_){}
     rotatePhotoMarkers();
   }
   // Apply the current rotation to the map container. Negative because we want
