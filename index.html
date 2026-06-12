@@ -1003,6 +1003,72 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   var saving = false;
   var pollTimer = null;
   var map = null, mapReady = false, mapMarkers = [], mapFitted = false;
+  var mapHeading = 0;       // current heading the map is rotated to (degrees)
+  var _mapHeadingTimer = null;
+
+  // Live map: rotates the satellite imagery to match the phone's heading, so
+  // "up" on the map is the direction you're facing. Auto-on whenever the
+  // Active Hunt view is open. Photos counter-rotate to stay upright.
+  function startLiveMap(){
+    if(_mapHeadingTimer) return;
+    // Reuse the compass listener and its smoothed rawCompassHeading.
+    if(typeof DeviceOrientationEvent !== 'undefined' &&
+       typeof DeviceOrientationEvent.requestPermission === 'function'){
+      DeviceOrientationEvent.requestPermission().then(function(p){
+        if(p==='granted') attachLiveMap();
+      }).catch(function(){});
+    } else {
+      attachLiveMap();
+    }
+  }
+  function attachLiveMap(){
+    window.addEventListener('deviceorientation', onOrient, true);
+    window.addEventListener('deviceorientationabsolute', onOrient, true);
+    // Update at ~5Hz so the map rotates smoothly without thrashing.
+    _mapHeadingTimer = setInterval(function(){
+      if(!map || !mapReady) return;
+      // Only update if the heading actually moved meaningfully.
+      if(Math.abs(angleDiff(rawCompassHeading, mapHeading)) < 2) return;
+      mapHeading = rawCompassHeading;
+      try { map.setHeading(mapHeading); } catch(_){}
+      // Counter-rotate each photo marker so faces stay upright.
+      rotatePhotoMarkers();
+    }, 200);
+  }
+  function stopLiveMap(){
+    if(_mapHeadingTimer){ clearInterval(_mapHeadingTimer); _mapHeadingTimer=null; }
+    if(map){ try { map.setHeading(0); } catch(_){} mapHeading = 0; }
+    // Don't remove the deviceorientation listener — other features share it.
+  }
+  // After mapHeading changes, swap each photo marker's icon for a re-rotated one.
+  function rotatePhotoMarkers(){
+    if(!mapMarkers) return;
+    for(var i=0;i<mapMarkers.length;i++){
+      var m = mapMarkers[i];
+      if(!m) continue;
+      if(m._photoKey){
+        var entry = _photoIconCache[m._photoKey];
+        if(entry){
+          try { m.setIcon(iconWithRotation(entry, -mapHeading)); } catch(_){}
+        }
+      } else if(m._driverColor){
+        var c = m._driverColor;
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
+          + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+c+'" stroke-width="2"/>'
+          + '<g transform="rotate('+(-mapHeading)+' 20 20)">'
+          + '<text x="20" y="27" text-anchor="middle" font-size="22">🚙</text>'
+          + '</g>'
+          + '</svg>';
+        try {
+          m.setIcon({
+            url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+            scaledSize: new google.maps.Size(40, 40),
+            anchor: new google.maps.Point(20, 20)
+          });
+        } catch(_){}
+      }
+    }
+  }
 
   // ---------- identity ----------
   function loadIdentity(){
@@ -2101,6 +2167,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     stopPolling();
     stopDriverTracking();
     stopLiveRadarListener();
+    stopLiveMap();
     liveRadar = false;
     try{
       localStorage.removeItem('vjg_code');
@@ -2134,6 +2201,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     stopPolling();
     stopDriverTracking();
     stopLiveRadarListener();
+    stopLiveMap();
     liveRadar = false;
     try{
       localStorage.removeItem('vjg_code');
@@ -2281,10 +2349,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       } else {
         stopPolling();
       }
+      startLiveMap();
     } else {
       // Leaving the Everyone view returns us to the live current hunt.
       viewingPastCode = null;
       stopPolling();
+      stopLiveMap();
     }
     setTimeout(scrollTop, 60);   // again after content height settles
   }
@@ -2613,7 +2683,10 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var center = mapCenter();
       map = new google.maps.Map(document.getElementById('map'), {
         center: center, zoom: 15, mapTypeId: 'hybrid',
-        disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy'
+        disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy',
+        // Enable heading rotation so we can spin the map to match the user's
+        // phone heading (live-map mode in the Active Hunt tab).
+        rotateControl: false, tilt: 0, heading: 0
       });
       mapReady = true;
       msg.classList.add('hide');
@@ -2722,23 +2795,30 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var color = colorFor(name);
     if(role === 'driver'){
       // Vehicle SVG marker — clear that this is the driver, not a chair.
+      // Counter-rotate the emoji so the vehicle stays upright when the map rotates.
       var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
         + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+color+'" stroke-width="2"/>'
+        + '<g transform="rotate('+(-mapHeading)+' 20 20)">'
         + '<text x="20" y="27" text-anchor="middle" font-size="22">🚙</text>'
+        + '</g>'
         + '</svg>';
-      // Use URL-encoded SVG (not btoa) so multi-byte characters in name/colour
-      // don't blow up base64 encoding.
       var url = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-      return new google.maps.Marker({
+      var dmarker = new google.maps.Marker({
         map: map, position: pos, title: title+' (driver)',
         icon: { url:url, scaledSize:new google.maps.Size(40,40), anchor:new google.maps.Point(20,20) },
         zIndex: 6
       });
+      dmarker._driverColor = color;  // mark so rotatePhotoMarkers can refresh it too
+      return dmarker;
     }
     if(photo){
       var icon = circlePhotoIcon(photo, color);
       if(icon){
-        return new google.maps.Marker({ map:map, position:pos, title:title, icon:icon, zIndex:5 });
+        var marker = new google.maps.Marker({ map:map, position:pos, title:title, icon:icon, zIndex:5 });
+        // Remember which cache entry this marker uses so rotatePhotoMarkers
+        // can later swap the icon with an updated rotation.
+        marker._photoKey = color + '|' + photo.length + '|' + photo.substring(0,32);
+        return marker;
       }
     }
     return new google.maps.Marker({
@@ -2748,19 +2828,22 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     });
   }
 
-  // Renders a profile photo into a circular icon with a coloured ring.
-  // Cached per photo so we don't rebuild every refresh.
-  var _photoIconCache = {};
-  var _photoLoading = {};   // tracks in-flight loads so we don't duplicate
+  // Renders a profile photo into a circular SVG icon with a coloured ring.
+  // Cached per photo. The SVG wraps the image in a <g rotate(...)> so we can
+  // counter-rotate later (when the map heading changes) without rebuilding.
+  var _photoIconCache = {};   // key -> { dataUrl (base for img), ring }
+  var _photoLoading = {};
   var _photoRerenderScheduled = false;
   function circlePhotoIcon(photo, ring){
     try{
       var key = ring + '|' + photo.length + '|' + photo.substring(0,32);
-      if(_photoIconCache[key]) return _photoIconCache[key];
-      if(_photoLoading[key]) return null;   // already loading, don't start again
+      if(_photoIconCache[key]) return iconWithRotation(_photoIconCache[key], -mapHeading);
+      if(_photoLoading[key]) return null;
       _photoLoading[key] = true;
       var imgObj = new Image();
       imgObj.onload = function(){
+        // Bake the photo into a clipped circle PNG (data URL) — this is the
+        // raster part that gets embedded into the SVG icon as an <image>.
         var D = 38, scale = 2, C = D*scale;
         var canvas = document.createElement('canvas');
         canvas.width = C; canvas.height = C;
@@ -2769,17 +2852,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         ctx.beginPath(); ctx.arc(C/2, C/2, C/2-scale, 0, Math.PI*2); ctx.clip();
         ctx.drawImage(imgObj, scale, scale, C-2*scale, C-2*scale);
         ctx.restore();
-        ctx.lineWidth = scale;
-        ctx.strokeStyle = ring;
-        ctx.beginPath(); ctx.arc(C/2, C/2, C/2-scale, 0, Math.PI*2); ctx.stroke();
-        _photoIconCache[key] = {
-          url: canvas.toDataURL('image/png'),
-          scaledSize: new google.maps.Size(D,D),
-          anchor: new google.maps.Point(D/2,D/2)
-        };
+        _photoIconCache[key] = { png: canvas.toDataURL('image/png'), ring: ring };
         delete _photoLoading[key];
-        // Schedule ONE redraw after the current batch of loads, so multiple
-        // photos finishing in quick succession don't cause a render storm.
         if(!_photoRerenderScheduled){
           _photoRerenderScheduled = true;
           setTimeout(function(){ _photoRerenderScheduled = false; renderMap(); }, 150);
@@ -2789,6 +2863,23 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       imgObj.src = photo;
       return null;
     }catch(e){ return null; }
+  }
+  // Build a Google-Maps marker icon from a cached photo + a rotation angle.
+  // Counter-rotates the photo content so the face stays upright while the map
+  // rotates underneath it. The wrapper SVG itself is map-aligned.
+  function iconWithRotation(entry, deg){
+    var D = 38;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+D+'" height="'+D+'" viewBox="0 0 '+D+' '+D+'">'
+            + '<g transform="rotate('+deg+' '+(D/2)+' '+(D/2)+')">'
+            + '<image href="'+entry.png+'" x="0" y="0" width="'+D+'" height="'+D+'"/>'
+            + '<circle cx="'+(D/2)+'" cy="'+(D/2)+'" r="'+(D/2-1)+'" fill="none" stroke="'+entry.ring+'" stroke-width="2"/>'
+            + '</g>'
+            + '</svg>';
+    return {
+      url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+      scaledSize: new google.maps.Size(D, D),
+      anchor: new google.maps.Point(D/2, D/2)
+    };
   }
 
   function dotIcon(color, r){
