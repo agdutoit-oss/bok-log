@@ -323,14 +323,14 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
       <label class="switchrow">
         <span class="switchlbl">Show everyone</span>
         <span class="switch">
-          <input type="checkbox" id="swEveryone" checked onchange="onToggleEveryone()">
+          <input type="checkbox" id="swEveryone" checked onclick="onToggleEveryone(event)">
           <span class="slider"></span>
         </span>
       </label>
       <label class="switchrow">
         <span class="switchlbl">Show bokke</span>
         <span class="switch">
-          <input type="checkbox" id="swBucks" checked onchange="onToggleBucks()">
+          <input type="checkbox" id="swBucks" checked onclick="onToggleBucks(event)">
           <span class="slider"></span>
         </span>
       </label>
@@ -1189,8 +1189,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     applyRole();
     syncTogglesToState();
     // iOS Safari restores form state from back-forward cache, which can leave
-    // checkboxes inconsistent with our JS state — re-sync on pageshow.
-    window.addEventListener('pageshow', function(){ syncTogglesToState(); });
+    // checkboxes inconsistent with our JS state. Re-sync on pageshow and on
+    // any extra change events the browser fires during restoration.
+    window.addEventListener('pageshow', function(){
+      syncTogglesToState();
+      if(state.code && state.view==='all') renderGroup();
+    });
     renderAll();              // draw the radar grid + empty list right away
     if(state.code){ refreshFromGroup(); }
     locateChair();
@@ -2134,14 +2138,18 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
   var BUCK_ZOOM = 15;        // at/above this zoom, bucks may show; below, hidden
 
-  function onToggleEveryone(){
-    whoFilter = document.getElementById('swEveryone').checked ? 'all' : 'me';
-    mapFitted = false;   // re-fit so the now-visible hunters come into view
+  function onToggleEveryone(ev){
+    if(ev){ ev.preventDefault(); }
+    whoFilter = (whoFilter === 'all') ? 'me' : 'all';
+    syncTogglesToState();
+    mapFitted = false;
     renderGroup();
   }
-  function onToggleBucks(){
-    showBucks = document.getElementById('swBucks').checked;
-    mapFitted = false;   // re-fit to include the bokke when shown
+  function onToggleBucks(ev){
+    if(ev){ ev.preventDefault(); }
+    showBucks = !showBucks;
+    syncTogglesToState();
+    mapFitted = false;
     renderGroup();
   }
   // Bucks show purely based on the switch now (no zoom auto-hide).
@@ -2477,18 +2485,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     // don't double-draw ourselves once our ping comes back.
     var shownNames = {};
 
-    var diag = [];
-    diag.push('whoFilter='+whoFilter+' sw.checked='+(document.getElementById('swEveryone')?document.getElementById('swEveryone').checked:'?'));
     lastGroup.hunters.forEach(function(h){
-      if(h.lat===''||h.lng===''){
-        diag.push('SKIP '+h.hunter+': empty coords');
-        return;
-      }
-      if(whoFilter==='me' && !isMine(h.hunter)){
-        diag.push('SKIP '+h.hunter+': filter');
-        return;
-      }
-      diag.push('DRAW '+h.hunter);
+      if(h.lat===''||h.lng==='') return;
+      if(whoFilter==='me' && !isMine(h.hunter)) return;
       var pos = { lat:Number(h.lat), lng:Number(h.lng) };
       shownNames[(h.hunter||'').toLowerCase()] = true;
       var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
@@ -2505,18 +2504,6 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       addNameTag(me, state.name);
       bounds.extend(me); any = true;
     }
-    try {
-      var dEl = document.getElementById('mapMsg');
-      if(dEl){
-        dEl.textContent = diag.join(' | ');
-        dEl.style.display = 'block';
-        dEl.style.background = 'rgba(0,0,0,.88)'; dEl.style.color='#fff';
-        dEl.style.fontSize = '10px'; dEl.style.padding = '5px 7px';
-        dEl.style.lineHeight = '1.3';
-        dEl.style.top='auto'; dEl.style.bottom='0'; dEl.style.left='0'; dEl.style.right='0';
-        dEl.style.maxHeight='100px'; dEl.style.overflow='auto';
-      }
-    } catch(_){}
 
     if(bucksVisible()){
     lastGroup.bucks.forEach(function(b){
