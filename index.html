@@ -1187,6 +1187,10 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     renderWhoami();
     updateLandmarkLabel();
     applyRole();
+    syncTogglesToState();
+    // iOS Safari restores form state from back-forward cache, which can leave
+    // checkboxes inconsistent with our JS state — re-sync on pageshow.
+    window.addEventListener('pageshow', function(){ syncTogglesToState(); });
     renderAll();              // draw the radar grid + empty list right away
     if(state.code){ refreshFromGroup(); }
     locateChair();
@@ -2118,7 +2122,16 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   // ---------- group data ----------
   var lastGroup = { hunters:[], bucks:[] };
   var whoFilter = 'all';     // 'all' = everyone, 'me' = only me
-  var showBucks = true;      // manual bucks/hunters toggle
+  var showBucks = true;      // matches Show bokke default
+
+  // Force toggle DOM state to match our JS defaults on load, in case Safari
+  // restored a stale checkbox value from a previous session.
+  function syncTogglesToState(){
+    var e = document.getElementById('swEveryone');
+    var b = document.getElementById('swBucks');
+    if(e) e.checked = (whoFilter === 'all');
+    if(b) b.checked = showBucks;
+  }
   var BUCK_ZOOM = 15;        // at/above this zoom, bucks may show; below, hidden
 
   function onToggleEveryone(){
