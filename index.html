@@ -335,7 +335,9 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
         </span>
       </label>
     </div>
-    <div id="mapWrap" class="mapwrap"><div id="map"></div><div id="mapMsg" class="mapmsg">Loading map…</div></div>
+    <div id="mapWrap" class="mapwrap"><div id="map"></div><div id="mapMsg" class="mapmsg">Loading map…</div>
+      <button onclick="fitAllOnMap()" style="position:absolute; top:8px; right:8px; z-index:5; background:rgba(0,0,0,.7); color:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">⤢ Fit all</button>
+    </div>
     <div class="list" id="groupList">
       <div class="empty">No one has reported in yet on this code.</div>
     </div>
@@ -2121,10 +2123,12 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
   function onToggleEveryone(){
     whoFilter = document.getElementById('swEveryone').checked ? 'all' : 'me';
+    mapFitted = false;   // re-fit so the now-visible hunters come into view
     renderGroup();
   }
   function onToggleBucks(){
     showBucks = document.getElementById('swBucks').checked;
+    mapFitted = false;   // re-fit to include the bokke when shown
     renderGroup();
   }
   // Bucks show purely based on the switch now (no zoom auto-hide).
@@ -2486,8 +2490,18 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     });
     }
 
-    if(any && !bounds.isEmpty() && !mapFitted){ map.fitBounds(bounds, 60); mapFitted = true; }
+    if(any && !bounds.isEmpty()){
+      // Re-fit when the set of visible markers grows or shrinks, not just first time.
+      var sig = mapMarkers.length;
+      if(!mapFitted || sig !== lastFitSig){
+        map.fitBounds(bounds, 60);
+        mapFitted = true;
+        lastFitSig = sig;
+      }
+    }
   }
+  var lastFitSig = -1;
+  function fitAllOnMap(){ mapFitted = false; lastFitSig = -1; renderMap(); }
 
   // A simple colored circle marker icon (no external image, no AdvancedMarker).
   // Build a chair marker: circular photo (with coloured ring) if the hunter has
