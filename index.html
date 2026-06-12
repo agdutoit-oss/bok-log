@@ -1186,6 +1186,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     }
     if(!c) return;
     try { map.setCenter(c); } catch(_){}
+    // Also pick a zoom that keeps the furthest visible hunter/bok inside the
+    // viewport, so "Centre me" actually shows everyone around me.
+    var radius = farthestMarkerDistance(c);
+    if(radius > 0){
+      var z = zoomForRadius(radius);
+      try { map.setZoom(z); } catch(_){}
+    }
   }
   // Compute the great-circle distance in metres between two lat/lng points.
   function haversine(a, b){
@@ -1229,10 +1236,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function zoomForRadius(radius){
     if(!radius || radius < 5) return 18;
     var lat = (state.chair && Number(state.chair.lat)) || -30;
-    var halfPx = 180;     // approx usable half-width after marker label room
+    // halfPx ~ visible half-width minus margin for marker labels (~140px wide).
+    // Smaller halfPx => more margin (more zoom-out). Bumping up the labels'
+    // width budget so the furthest hunter's name doesn't get clipped.
+    var halfPx = 130;
     var z = Math.log2(156543.03 * Math.cos(lat*Math.PI/180) * halfPx / radius);
     z = Math.floor(z);
-    if(z < 12) z = 12;
+    if(z < 10) z = 10;     // allow very wide views for spread-out groups
     if(z > 19) z = 19;
     return z;
   }
