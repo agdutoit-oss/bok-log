@@ -1003,15 +1003,15 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   var saving = false;
   var pollTimer = null;
   var map = null, mapReady = false, mapMarkers = [], mapFitted = false;
-  var mapHeading = 0;       // current heading the map is rotated to (degrees)
-  var _mapHeadingTimer = null;
+  var mapHeading = 0;       // current CSS rotation applied to the map element
 
-  // Live map: rotates the satellite imagery to match the phone's heading, so
-  // "up" on the map is the direction you're facing. Auto-on whenever the
-  // Active Hunt view is open. Photos counter-rotate to stay upright.
+  // Live map: rotates the map container with CSS so that the direction the
+  // phone is pointing sits at the top of the map. Photo markers are
+  // counter-rotated so faces stay upright. The map is kept centred on the
+  // user's chair so they're always in the middle of the rotation.
+  var _mapHeadingTimer = null;
   function startLiveMap(){
     if(_mapHeadingTimer) return;
-    // Reuse the compass listener and its smoothed rawCompassHeading.
     if(typeof DeviceOrientationEvent !== 'undefined' &&
        typeof DeviceOrientationEvent.requestPermission === 'function'){
       DeviceOrientationEvent.requestPermission().then(function(p){
@@ -1024,23 +1024,85 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function attachLiveMap(){
     window.addEventListener('deviceorientation', onOrient, true);
     window.addEventListener('deviceorientationabsolute', onOrient, true);
-    // Update at ~5Hz so the map rotates smoothly without thrashing.
+    // Enlarge the map element so its rotated corners still cover the viewport.
+    sizeMapForRotation(true);
     _mapHeadingTimer = setInterval(function(){
       if(!map || !mapReady) return;
-      // Only update if the heading actually moved meaningfully.
       if(Math.abs(angleDiff(rawCompassHeading, mapHeading)) < 2) return;
       mapHeading = rawCompassHeading;
-      try { map.setHeading(mapHeading); } catch(_){}
-      // Counter-rotate each photo marker so faces stay upright.
+      applyMapRotation();
       rotatePhotoMarkers();
+      recentreOnMe();
     }, 200);
   }
   function stopLiveMap(){
     if(_mapHeadingTimer){ clearInterval(_mapHeadingTimer); _mapHeadingTimer=null; }
-    if(map){ try { map.setHeading(0); } catch(_){} mapHeading = 0; }
-    // Don't remove the deviceorientation listener — other features share it.
+    mapHeading = 0;
+    var el = document.getElementById('map');
+    if(el){ el.style.transform = ''; el.style.transformOrigin = ''; }
+    sizeMapForRotation(false);
+    rotatePhotoMarkers();  // counter-rotation -> 0, photos look the same now
   }
-  // After mapHeading changes, swap each photo marker's icon for a re-rotated one.
+  // Apply the current rotation to the map container. Negative because we want
+  // the heading at the TOP — rotating the map by -heading places the heading
+  // direction upward.
+  function applyMapRotation(){
+    var el = document.getElementById('map');
+    if(!el) return;
+    el.style.transformOrigin = '50% 50%';
+    el.style.transform = 'rotate(' + (-mapHeading) + 'deg)';
+  }
+  // When the map element rotates by θ, its corners poke outside the viewport
+  // unless the element is enlarged. The factor sqrt(2) (~1.42) covers any angle.
+  function sizeMapForRotation(big){
+    var wrap = document.getElementById('mapWrap');
+    var el = document.getElementById('map');
+    if(!wrap || !el) return;
+    if(big){
+      wrap.style.overflow = 'hidden';
+      var s = 1.45;   // enlargement factor; corners always fit
+      var pct = ((s-1)/2 * 100).toFixed(2);
+      el.style.position = 'absolute';
+      el.style.top = '-' + pct + '%';
+      el.style.left = '-' + pct + '%';
+      el.style.width = (s*100).toFixed(2) + '%';
+      el.style.height = (s*100).toFixed(2) + '%';
+      // Tell Google Maps that the element resized.
+      try { google.maps.event.trigger(map, 'resize'); } catch(_){}
+    } else {
+      wrap.style.overflow = '';
+      el.style.position = '';
+      el.style.top = '';
+      el.style.left = '';
+      el.style.width = '';
+      el.style.height = '';
+      try { google.maps.event.trigger(map, 'resize'); } catch(_){}
+    }
+  }
+  // Keep the map centred on the user's chair (or last known position) so the
+  // user is always at the rotation pivot.
+  function recentreOnMe(){
+    if(!map) return;
+    var c = null;
+    if(state.chair && isFinite(Number(state.chair.lat)) && isFinite(Number(state.chair.lng))){
+      c = { lat: Number(state.chair.lat), lng: Number(state.chair.lng) };
+    } else if(lastGroup && lastGroup.hunters){
+      var myname = (state.name||'').toLowerCase();
+      for(var i=0;i<lastGroup.hunters.length;i++){
+        var h = lastGroup.hunters[i];
+        if((h.hunter||'').toLowerCase() === myname && isFinite(Number(h.lat)) && isFinite(Number(h.lng))){
+          c = { lat: Number(h.lat), lng: Number(h.lng) }; break;
+        }
+      }
+    }
+    if(c){
+      try { map.setCenter(c); } catch(_){}
+    }
+  }
+  // The map container is rotated by -mapHeading via CSS, so a marker drawn at
+  // default orientation also visually rotates by -mapHeading. We counter that
+  // by rotating the marker's content by +mapHeading so photos/icons stay
+  // upright on screen.
   function rotatePhotoMarkers(){
     if(!mapMarkers) return;
     for(var i=0;i<mapMarkers.length;i++){
@@ -1049,13 +1111,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       if(m._photoKey){
         var entry = _photoIconCache[m._photoKey];
         if(entry){
-          try { m.setIcon(iconWithRotation(entry, -mapHeading)); } catch(_){}
+          try { m.setIcon(iconWithRotation(entry, mapHeading)); } catch(_){}
         }
       } else if(m._driverColor){
-        var c = m._driverColor;
+        var col = m._driverColor;
         var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
-          + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+c+'" stroke-width="2"/>'
-          + '<g transform="rotate('+(-mapHeading)+' 20 20)">'
+          + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+col+'" stroke-width="2"/>'
+          + '<g transform="rotate('+mapHeading+' 20 20)">'
           + '<text x="20" y="27" text-anchor="middle" font-size="22">🚙</text>'
           + '</g>'
           + '</svg>';
@@ -2683,10 +2745,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var center = mapCenter();
       map = new google.maps.Map(document.getElementById('map'), {
         center: center, zoom: 15, mapTypeId: 'hybrid',
-        disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy',
-        // Enable heading rotation so we can spin the map to match the user's
-        // phone heading (live-map mode in the Active Hunt tab).
-        rotateControl: false, tilt: 0, heading: 0
+        disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy'
       });
       mapReady = true;
       msg.classList.add('hide');
@@ -2798,7 +2857,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       // Counter-rotate the emoji so the vehicle stays upright when the map rotates.
       var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
         + '<circle cx="20" cy="20" r="18" fill="#1d2017" stroke="'+color+'" stroke-width="2"/>'
-        + '<g transform="rotate('+(-mapHeading)+' 20 20)">'
+        + '<g transform="rotate('+mapHeading+' 20 20)">'
         + '<text x="20" y="27" text-anchor="middle" font-size="22">🚙</text>'
         + '</g>'
         + '</svg>';
@@ -2808,7 +2867,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         icon: { url:url, scaledSize:new google.maps.Size(40,40), anchor:new google.maps.Point(20,20) },
         zIndex: 6
       });
-      dmarker._driverColor = color;  // mark so rotatePhotoMarkers can refresh it too
+      dmarker._driverColor = color;
       return dmarker;
     }
     if(photo){
@@ -2837,7 +2896,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function circlePhotoIcon(photo, ring){
     try{
       var key = ring + '|' + photo.length + '|' + photo.substring(0,32);
-      if(_photoIconCache[key]) return iconWithRotation(_photoIconCache[key], -mapHeading);
+      if(_photoIconCache[key]) return iconWithRotation(_photoIconCache[key], mapHeading);
       if(_photoLoading[key]) return null;
       _photoLoading[key] = true;
       var imgObj = new Image();
