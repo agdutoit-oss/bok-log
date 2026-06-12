@@ -2483,6 +2483,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
     var diag = ['whoFilter='+whoFilter+' photoCache='+Object.keys(_photoIconCache).length];
     lastGroup.hunters.forEach(function(h){
+      try {
       var lat = Number(h.lat), lng = Number(h.lng);
       if(!isFinite(lat) || !isFinite(lng) || (lat===0 && lng===0)){
         diag.push('SKIP '+h.hunter+':bad('+h.lat+','+h.lng+')');
@@ -2496,6 +2497,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       mapMarkers.push(makeHunterMarker(pos, h.hunter, photo, h.role||'hunter'));
       addNameTag(pos, h.hunter);
       bounds.extend(pos); any = true;
+      } catch(err){
+        diag.push('ERR '+h.hunter+':'+(err && err.message ? err.message : err));
+      }
     });
 
     // Always show my own current chair from local GPS — works even solo and
@@ -2506,11 +2510,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       addNameTag(me, state.name);
       bounds.extend(me); any = true;
     }
+    // Write diag NOW (before bok loop) so we see it even if anything after fails.
     try {
       var dEl = document.getElementById('mapMsg');
       if(dEl){
         dEl.textContent = diag.join(' | ');
-        dEl.style.cssText = 'display:block;background:rgba(0,0,0,.88);color:#fff;font-size:10px;padding:5px 7px;line-height:1.3;top:auto;bottom:0;left:0;right:0;max-height:90px;overflow:auto;';
+        dEl.classList.remove('hide');
+        dEl.style.cssText = 'display:block!important;background:rgba(0,0,0,.88);color:#fff;font-size:10px;padding:5px 7px;line-height:1.3;top:auto;bottom:0;left:0;right:0;max-height:120px;overflow:auto;position:absolute;';
       }
     } catch(_){}
 
