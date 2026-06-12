@@ -87,6 +87,7 @@
   .compassbtn{width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
     border-radius:12px; padding:11px; font-size:14px; font-weight:600; margin-bottom:14px; cursor:pointer;}
   .compassbtn.live{border-color:var(--good); color:var(--good);}
+  .ghost.live{border-color:var(--good); color:var(--good);}
 
   label.fld{display:block; font-size:13px; color:var(--muted); margin:0 0 5px;}
   .row{margin-bottom:14px;}
@@ -292,6 +293,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
     <div style="display:flex; gap:8px; margin-bottom:10px;">
       <button class="ghost" id="setChairBtn" style="flex:1; padding:26px 13px; font-size:14px;" onclick="pingPosition()">⚲ Set chair</button>
       <button class="ghost" id="setLandmarkBtn" style="flex:1; padding:26px 13px; font-size:14px;" onclick="setLandmark()">⛰ Set landmark</button>
+      <button class="ghost" id="liveRadarBtn" style="flex:1; padding:26px 13px; font-size:14px;" onclick="toggleLiveRadar()">🧭 Live radar</button>
     </div>
     <div id="landmarkLbl" class="whoami" style="display:none; cursor:pointer; border-color:var(--good); color:var(--good);" onclick="clearLandmark()"></div>
     <div id="chairBanner" class="whoami" style="display:none; cursor:default; border-color:var(--accent);">
@@ -1308,28 +1310,121 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
   }
 
+  // State for the live-radar toggle on the My radar tab.
+  // When on, the radar rotates so the heading the phone is pointing in sits at
+  // the top of the screen, making it intuitive to walk toward a bok.
+  var liveRadar = false;
+
+  function toggleLiveRadar(){
+    liveRadar = !liveRadar;
+    var btn = document.getElementById('liveRadarBtn');
+    if(btn){
+      btn.classList.toggle('live', liveRadar);
+      btn.textContent = liveRadar ? '● Live radar — tap to lock' : '🧭 Live radar';
+    }
+    if(liveRadar){
+      // Reuse the compass machinery: it already smooths and updates
+      // rawCompassHeading on every device-orientation event. We piggyback a
+      // tiny redraw timer so the radar follows that value.
+      if(typeof DeviceOrientationEvent !== 'undefined' &&
+         typeof DeviceOrientationEvent.requestPermission === 'function'){
+        DeviceOrientationEvent.requestPermission().then(function(p){
+          if(p==='granted') startLiveRadarListener();
+        }).catch(function(){});
+      } else {
+        startLiveRadarListener();
+      }
+    } else {
+      stopLiveRadarListener();
+      renderRadar();
+    }
+  }
+  var _liveRadarTimer = null;
+  function startLiveRadarListener(){
+    window.addEventListener('deviceorientation', onOrient, true);
+    window.addEventListener('deviceorientationabsolute', onOrient, true);
+    if(_liveRadarTimer) clearInterval(_liveRadarTimer);
+    // Re-draw at ~10 Hz when live so the radar tracks the phone smoothly.
+    _liveRadarTimer = setInterval(function(){
+      if(liveRadar && state.view==='mine') renderRadar();
+    }, 100);
+  }
+  function stopLiveRadarListener(){
+    if(_liveRadarTimer){ clearInterval(_liveRadarTimer); _liveRadarTimer=null; }
+    // Don't remove deviceorientation listener — the dial's compass uses the
+    // same one. onOrient is idempotent.
+  }
+
   function renderRadar(){
     var cx=160, cy=160, maxR=140;
     var dists = state.bucks.map(function(b){ return Number(b.distance)||0; });
     var maxDist = Math.max(100, Math.max.apply(null, dists.concat([0])));
+    // Round maxDist up to a clean number for nicer labels.
+    var step = (maxDist > 400) ? 200 : (maxDist > 200 ? 100 : 50);
+    maxDist = Math.ceil(maxDist/step) * step;
+
+    // When live, the radar is rotated so the phone's heading sits at the top.
+    // Compass heading is the direction the phone's top edge points. We rotate
+    // the world by -heading so that direction shows at the top of the radar.
+    var rotDeg = liveRadar ? -rawCompassHeading : 0;
+
+    function rot(x,y){
+      if(!rotDeg) return {x:x, y:y};
+      var dx=x-cx, dy=y-cy, rad=rotDeg*Math.PI/180;
+      var c=Math.cos(rad), s=Math.sin(rad);
+      return { x: cx + dx*c - dy*s, y: cy + dx*s + dy*c };
+    }
 
     var svg = '';
-    svg += ring(cx,cy,maxR) + ring(cx,cy,maxR*0.66) + ring(cx,cy,maxR*0.33);
-    svg += '<line class="raxis" x1="'+cx+'" y1="'+(cy-maxR)+'" x2="'+cx+'" y2="'+(cy+maxR)+'"/>';
-    svg += '<line class="raxis" x1="'+(cx-maxR)+'" y1="'+cy+'" x2="'+(cx+maxR)+'" y2="'+cy+'"/>';
-    svg += txt(cx, cy-maxR-6, 'N') + txt(cx+maxR+8, cy+4, 'E')
-         + txt(cx, cy+maxR+16, 'S') + txt(cx-maxR-8, cy+4, 'W');
-    // distance ring labels
-    svg += '<text class="rlbl" x="'+(cx+4)+'" y="'+(cy-maxR+12)+'">'+Math.round(maxDist)+'m</text>';
 
-    // you
+    // Range rings — one per `step` metres, scaled to maxR.
+    for(var d=step; d<=maxDist; d+=step){
+      var r = maxR * (d/maxDist);
+      svg += '<circle class="rring" cx="'+cx+'" cy="'+cy+'" r="'+r+'"/>';
+      // Label each ring near the top (rotates with the radar in live mode).
+      var lp = rot(cx+4, cy-r+12);
+      svg += '<text class="rlbl" x="'+lp.x+'" y="'+lp.y+'" transform="rotate('+(-rotDeg)+' '+lp.x+' '+lp.y+')">'+d+'m</text>';
+    }
+    // Cross-hair axes (rotate with the radar).
+    var ax1 = rot(cx, cy-maxR), ax2 = rot(cx, cy+maxR);
+    var ax3 = rot(cx-maxR, cy), ax4 = rot(cx+maxR, cy);
+    svg += '<line class="raxis" x1="'+ax1.x+'" y1="'+ax1.y+'" x2="'+ax2.x+'" y2="'+ax2.y+'"/>';
+    svg += '<line class="raxis" x1="'+ax3.x+'" y1="'+ax3.y+'" x2="'+ax4.x+'" y2="'+ax4.y+'"/>';
+
+    // Cardinal letters: rotate WITH the world so N stays true-North in live mode.
+    var card=[['N',0],['E',90],['S',180],['W',270]];
+    card.forEach(function(c){
+      var rad=(c[1]-90)*Math.PI/180, rr=maxR+10;
+      var x=cx+rr*Math.cos(rad), y=cy+rr*Math.sin(rad);
+      var p = rot(x,y);
+      var color = (c[0]==='N' && liveRadar) ? 'var(--accent)' : (liveRadar?'#7a7e62':'#a7a994');
+      svg += '<text x="'+p.x+'" y="'+(p.y+5)+'" text-anchor="middle" font-size="13" font-weight="700" fill="'+color+'" transform="rotate('+(-rotDeg)+' '+p.x+' '+(p.y+5)+')">'+c[0]+'</text>';
+    });
+
+    // The "you" marker (chair) at centre.
     svg += '<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="var(--you)" stroke="#fff" stroke-width="1"/>';
 
-    // bucks
+    // When live, add an upward-pointing chevron at the centre showing which
+    // way the phone is facing — visually "I am pointing this way" arrow.
+    if(liveRadar){
+      svg += '<polygon points="'+(cx-7)+','+(cy-4)+' '+(cx+7)+','+(cy-4)+' '+cx+','+(cy-16)+'" fill="var(--accent)"/>';
+    }
+
+    // Bok dots.
     state.bucks.forEach(function(b){
-      var p = polar(Number(b.bearing)||0, Number(b.distance)||0, maxDist, cx, cy, maxR);
-      svg += '<circle cx="'+p.x+'" cy="'+p.y+'" r="12" fill="var(--buck)"/>';
-      svg += '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" font-size="12" font-weight="700" fill="#06243f">'+b.number+'</text>';
+      var bearing = Number(b.bearing)||0;
+      var dist = Number(b.distance)||0;
+      var r = maxR * Math.min(1, dist/maxDist);
+      var rad = (bearing - 90) * Math.PI/180;
+      var bx = cx + r*Math.cos(rad), by = cy + r*Math.sin(rad);
+      var p = rot(bx, by);
+      var fill = b.collected ? '#5dca7a' : 'var(--buck)';
+      svg += '<circle cx="'+p.x+'" cy="'+p.y+'" r="13" fill="'+fill+'" stroke="#fff" stroke-width="1"/>';
+      // Bok number, counter-rotated so it stays upright in live mode.
+      svg += '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" font-size="12" font-weight="700" fill="#06243f" transform="rotate('+(-rotDeg)+' '+p.x+' '+(p.y+4)+')">'+(b.collected?'\u2713':b.number)+'</text>';
+      // Distance label just outside the dot (also upright).
+      var lx = p.x, ly = p.y + 26;
+      svg += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="10" font-weight="700" fill="#cfd1bd" transform="rotate('+(-rotDeg)+' '+lx+' '+ly+')">'+dist+' m</text>';
     });
 
     document.getElementById('radar').innerHTML = svg;
@@ -2005,6 +2100,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var endedCode = state.code;
     stopPolling();
     stopDriverTracking();
+    stopLiveRadarListener();
+    liveRadar = false;
     try{
       localStorage.removeItem('vjg_code');
       localStorage.removeItem('vjg_huntname');
@@ -2036,6 +2133,8 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     if(!confirm('Leave this hunt? Your name and photo are kept; the hunt continues for everyone else.')) return;
     stopPolling();
     stopDriverTracking();
+    stopLiveRadarListener();
+    liveRadar = false;
     try{
       localStorage.removeItem('vjg_code');
       localStorage.removeItem('vjg_huntname');
