@@ -323,14 +323,14 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
       <label class="switchrow">
         <span class="switchlbl">Show everyone</span>
         <span class="switch">
-          <input type="checkbox" id="swEveryone" checked onclick="onToggleEveryone(event)">
+          <input type="checkbox" id="swEveryone" checked onchange="onToggleEveryone()">
           <span class="slider"></span>
         </span>
       </label>
       <label class="switchrow">
         <span class="switchlbl">Show bokke</span>
         <span class="switch">
-          <input type="checkbox" id="swBucks" checked onclick="onToggleBucks(event)">
+          <input type="checkbox" id="swBucks" checked onchange="onToggleBucks()">
           <span class="slider"></span>
         </span>
       </label>
@@ -2138,17 +2138,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
   var BUCK_ZOOM = 15;        // at/above this zoom, bucks may show; below, hidden
 
-  function onToggleEveryone(ev){
-    if(ev){ ev.preventDefault(); }
-    whoFilter = (whoFilter === 'all') ? 'me' : 'all';
-    syncTogglesToState();
+  function onToggleEveryone(){
+    whoFilter = document.getElementById('swEveryone').checked ? 'all' : 'me';
     mapFitted = false;
     renderGroup();
   }
-  function onToggleBucks(ev){
-    if(ev){ ev.preventDefault(); }
-    showBucks = !showBucks;
-    syncTogglesToState();
+  function onToggleBucks(){
+    showBucks = document.getElementById('swBucks').checked;
     mapFitted = false;
     renderGroup();
   }
