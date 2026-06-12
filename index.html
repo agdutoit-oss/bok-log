@@ -2157,8 +2157,6 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     var total = lastGroup.bucks.length;
     var done = lastGroup.bucks.filter(function(b){ return b.collected; }).length;
     document.getElementById('groupBuckCount').textContent = done ? (done+'/'+total) : total;
-    // DIAG: capture lastGroup state right before list and map see it.
-    window.__diagLast = { h: lastGroup.hunters.length, b: lastGroup.bucks.length, hunters: lastGroup.hunters.map(function(x){return x.hunter+':'+x.lat;}) };
     renderGroupList();
     renderMap();
   }
@@ -2421,7 +2419,16 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       });
       mapReady = true;
       msg.classList.add('hide');
-      renderMap();
+      // If we already have group data, render it; otherwise trigger a refresh
+      // so the map populates with the current hunters/bokke (was rendering
+      // empty when the map loaded before getGroup had returned).
+      if(lastGroup.hunters.length || lastGroup.bucks.length){
+        renderMap();
+      } else if(state.code){
+        refreshFromGroup();
+      } else {
+        renderMap();
+      }
     }catch(err){
       document.getElementById('mapMsg').textContent =
         'Map could not load — using the coordinate list below.';
@@ -2457,19 +2464,9 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     // don't double-draw ourselves once our ping comes back.
     var shownNames = {};
 
-    var diag = [];
     lastGroup.hunters.forEach(function(h){
-      if(h.lat===''||h.lng===''){
-        diag.push('SKIP '+h.hunter+': empty coords');
-        console.log('SKIPPED (empty coords)', h.hunter, h);
-        return;
-      }
-      if(whoFilter==='me' && !isMine(h.hunter)){
-        diag.push('SKIP '+h.hunter+': filter');
-        return;
-      }
-      diag.push('DRAW '+h.hunter+' '+h.lat+','+h.lng);
-      console.log('DRAW', h.hunter, h.lat, h.lng);
+      if(h.lat===''||h.lng==='') return;
+      if(whoFilter==='me' && !isMine(h.hunter)) return;
       var pos = { lat:Number(h.lat), lng:Number(h.lng) };
       shownNames[(h.hunter||'').toLowerCase()] = true;
       var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
@@ -2486,26 +2483,6 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       addNameTag(me, state.name);
       bounds.extend(me); any = true;
     }
-    // DIAG: show what the map saw on screen (so we can debug without devtools).
-    try {
-      var dEl = document.getElementById('mapMsg');
-      if(dEl){
-        var groupDiag = window.__diagLast ? ('renderGroup saw '+window.__diagLast.h+' hunters: ['+window.__diagLast.hunters.join(', ')+']') : '(no group diag)';
-        dEl.innerHTML = '<div>'+groupDiag+'</div><div>renderMap saw '+lastGroup.hunters.length+' hunters: ['+diag.join(' | ')+']</div>';
-        dEl.style.display = 'block';
-        dEl.style.background = 'rgba(0,0,0,.88)';
-        dEl.style.color = '#fff';
-        dEl.style.fontSize = '10px';
-        dEl.style.lineHeight = '1.3';
-        dEl.style.padding = '6px 8px';
-        dEl.style.maxHeight = '140px';
-        dEl.style.overflow = 'auto';
-        dEl.style.top = 'auto';
-        dEl.style.bottom = '0';
-        dEl.style.left = '0';
-        dEl.style.right = '0';
-      }
-    } catch(_){}
 
     if(bucksVisible()){
     lastGroup.bucks.forEach(function(b){
