@@ -1,5 +1,7 @@
 // Bok Log service worker — caches the app so it opens with no signal.
-var CACHE = 'boklog-v3';
+// The cache name comes from APP_VERSION in index.html, which registers this
+// file as sw.js?v=<version>. Bump the version there; nothing to change here.
+var CACHE = 'boklog-v' + (new URL(self.location.href).searchParams.get('v') || '3');
 var SHELL = [
   './',
   './index.html',
@@ -19,7 +21,11 @@ self.addEventListener('install', function(e){
 });
 
 self.addEventListener('activate', function(e){
-  e.waitUntil(self.clients.claim());
+  // Drop caches from older versions, then take over open pages.
+  e.waitUntil(caches.keys().then(function(keys){
+    return Promise.all(keys.filter(function(k){ return k !== CACHE && k.indexOf('boklog-') === 0; })
+      .map(function(k){ return caches.delete(k); }));
+  }).then(function(){ return self.clients.claim(); }));
 });
 
 self.addEventListener('fetch', function(e){

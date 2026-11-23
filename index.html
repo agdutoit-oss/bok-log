@@ -283,6 +283,7 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
 </g></svg>
     <div class="title" style="font-size:24px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:var(--accent2);">Bok Log</div>
     <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:3px;">voorsit jag tracker</div>
+    <div id="appVersion" style="font-size:11px;color:var(--muted);margin-top:3px;opacity:.8;"></div>
     <div class="session" id="sessionLbl" style="display:none;">Loading…</div>
   </div>
 
@@ -1029,6 +1030,18 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
 
 // ===== end data layer =====
 
+
+  // ====== VERSION ======
+  // Bump APP_VERSION (and the date) every time you upload a new index.html.
+  // It shows under the title so you can see which upload the phone is running,
+  // and it also names the offline cache (sw.js?v=...), so a new version
+  // installs a fresh service worker automatically.
+  var APP_VERSION = '4';
+  var APP_VERSION_DATE = '23 Nov 2026';
+  (function(){
+    var el = document.getElementById('appVersion');
+    if(el) el.textContent = 'Version ' + APP_VERSION + ' \u00B7 ' + APP_VERSION_DATE;
+  })();
 
   // ====== CONFIG ======
   // Paste your Google Maps JavaScript API key between the quotes.
@@ -2382,7 +2395,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   function tryRegisterSW(){
     try{
       if(!('serviceWorker' in navigator)) return;
-      navigator.serviceWorker.register('sw.js').then(function(){
+      navigator.serviceWorker.register('sw.js?v=' + encodeURIComponent(APP_VERSION)).then(function(){
         console.log('SW registered — offline-open enabled');
       }).catch(function(err){ console.log('SW failed:', err); });
     }catch(e){}
