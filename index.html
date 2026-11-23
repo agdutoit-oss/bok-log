@@ -142,6 +142,34 @@
   .mapwrap{position:relative; width:100%; height:340px; background:var(--panel);
     border:1px solid var(--line); border-radius:14px; overflow:hidden; margin-bottom:12px;}
   #map{position:absolute; inset:0; width:100%; height:100%;}
+  /* Live compass map: #mapRot is a diagonal-sized square rotated with CSS;
+     pins sit in a separate, non-rotating layer so they stay upright. */
+  #mapZoom{position:absolute; inset:0; transform-origin:0 0;}
+  #mapRot{position:absolute; left:0; top:0; width:100%; height:100%; transform-origin:50% 50%; background:#1d2017;}
+  #mapPins{position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden;}
+  #mapTouch{position:absolute; inset:0; z-index:3; touch-action:none; -webkit-user-select:none; user-select:none;}
+  .mpin{position:absolute; left:0; top:0; will-change:transform;}
+  .mpin > *{position:absolute; box-sizing:border-box;}
+  .mp-ph,.mp-car{width:38px; height:38px; left:-19px; top:-19px; border-radius:50%; border:2px solid #fff;
+    background:#1d2017; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .mp-ph img{width:100%; height:100%; object-fit:cover; display:block;}
+  .mp-car{font-size:20px; line-height:34px; text-align:center;}
+  .mp-dot{width:22px; height:22px; left:-11px; top:-11px; border-radius:50%; border:2px solid #fff;}
+  .mp-nm{left:0; top:21px; transform:translateX(-50%); white-space:nowrap; font-size:12px; font-weight:700;
+    color:#fff; text-shadow:0 0 3px #000,0 0 3px #000,0 1px 2px #000;}
+  .mp-dot + .mp-nm{top:13px;}
+  .mp-bok{width:26px; height:26px; left:-13px; top:-13px; border-radius:50%; border:2px solid #fff;
+    color:#06243f; font-size:13px; font-weight:700; line-height:22px; text-align:center;}
+  .mpin.me .mp-ph,.mpin.me .mp-car,.mpin.me .mp-dot{border:3px solid #fff; box-shadow:0 0 0 2px #000,0 0 12px 3px rgba(255,255,255,.75);}
+  .mpin.me .mp-nm{color:#ffe07a;}
+  .mapbtns{position:absolute; top:8px; right:8px; z-index:5; display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+  .mapbtn{background:rgba(0,0,0,.7); color:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;}
+  .mapbtn-z{width:36px; height:36px; padding:0; font-size:20px; line-height:1;}
+  .mapcompass{position:absolute; left:8px; bottom:8px; z-index:5; width:44px; height:44px; padding:0; border-radius:50%;
+    background:rgba(0,0,0,.7); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .mapcompass.off{border-color:#e2452f;}
+  .mapcompasshint{position:absolute; left:58px; bottom:12px; right:60px; z-index:5; background:rgba(0,0,0,.75); color:#fff;
+    font-size:12px; padding:6px 8px; border-radius:6px; pointer-events:none;}
   .mapmsg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     text-align:center; padding:20px; color:var(--muted); font-size:14px; pointer-events:none;}
   .mapmsg.hide{display:none;}
@@ -338,13 +366,22 @@ c0 224 0 224 30 255 27 27 30 38 30 90 0 52 3 63 30 90 30 31 30 31 30 334 0
       </label>
     </div>
     <div id="mapWrap" class="mapwrap">
-      <div id="mapRot" style="position:absolute; inset:0; transform-origin:50% 50%;">
-        <div id="map"></div>
+      <div id="mapZoom">
+        <div id="mapRot"><div id="map"></div></div>
       </div>
-      <div id="mapTouch" style="position:absolute; inset:0; z-index:4; display:none; touch-action:none;"></div>
+      <div id="mapPins"></div>
+      <div id="mapTouch"></div>
       <div id="mapMsg" class="mapmsg">Loading map…</div>
-      <button onclick="fitAllOnMap()" style="position:absolute; top:8px; right:8px; z-index:5; background:rgba(0,0,0,.7); color:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">⤢ Fit all</button>
-      <button onclick="centreOnMe()" style="position:absolute; top:46px; right:8px; z-index:5; background:rgba(0,0,0,.7); color:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">⌖ Centre me</button>
+      <div class="mapbtns">
+        <button class="mapbtn" onclick="fitAllOnMap()">⤢ Fit all</button>
+        <button class="mapbtn" onclick="centreOnMe()">⌖ Centre me</button>
+        <button class="mapbtn mapbtn-z" onclick="mapZoomIn()" aria-label="Zoom in">+</button>
+        <button class="mapbtn mapbtn-z" onclick="mapZoomOut()" aria-label="Zoom out">−</button>
+      </div>
+      <button id="mapCompassBtn" class="mapcompass" onclick="toggleMapCompass()" aria-label="Compass">
+        <svg id="mapNorth" viewBox="0 0 40 40" width="40" height="40"><polygon points="20,4 26,20 14,20" fill="#e2452f"/><polygon points="20,36 26,20 14,20" fill="#e8e8e8"/><text x="20" y="15.5" text-anchor="middle" font-size="8" font-weight="700" fill="#fff">N</text></svg>
+      </button>
+      <div id="mapCompassHint" class="mapcompasshint" style="display:none">Tap the compass to let the map turn with your phone</div>
     </div>
     <div class="list" id="groupList">
       <div class="empty">No one has reported in yet on this code.</div>
@@ -1008,301 +1045,386 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   var compassActive = false;
   var saving = false;
   var pollTimer = null;
-  var map = null, mapReady = false, mapMarkers = [], mapFitted = false;
-  var mapHeading = 0;       // current CSS rotation applied to the map element
+  var map = null, mapReady = false, mapFitted = false;
+  var MAP_MIN_ZOOM = 3, MAP_MAX_ZOOM = 18;
 
-  // Live map: rotates the map container with CSS so that the direction the
-  // phone is pointing sits at the top of the map. Photo markers are
-  // counter-rotated so faces stay upright. The map is kept centred on the
-  // user's chair so they're always in the middle of the rotation.
-  var _mapHeadingTimer = null;
+  // ===== Live compass map (Active Hunt) =====
+  // Google's raster satellite map can't rotate by itself (setHeading needs a
+  // vector map + Cloud mapId), so we do it like this:
+  //  - #mapRot is a SQUARE as big as the map box's diagonal, centred on the box,
+  //    and rotated with CSS. Its corners always cover the visible box, and
+  //    because it is centred, the map's centre is exactly the middle of what
+  //    you see. So setCenter(me) really puts me in the middle.
+  //  - Photos, names and bok numbers are NOT Google markers. They are plain
+  //    HTML "pins" in #mapPins, a layer that does not rotate. We work out where
+  //    each one belongs on screen ourselves, so they stay upright, level and
+  //    are never clipped.
+  //  - Google's own gestures are off. #mapTouch handles drag / pinch /
+  //    double-tap and turns finger movement through the rotation, so the map
+  //    always moves the same way as your finger.
+  var mapHeading = 0;          // heading currently drawn on screen (0..360)
+  var mapHeadingTarget = 0;    // latest smoothed compass heading
+  var mapCompassOn = true;     // false = plain North-up map
+  var mapGotHeading = false;   // have we had a real compass reading yet?
+  var mapFollowMe = true;      // keep me in the middle as my GPS position moves
+  var _liveMapOn = false, _mapRaf = null, _mapSin = null, _mapCos = null;
+  var _mapBox = { w:0, h:0, s:0 };
+  var _mapPreview = null;      // pinch-in-progress CSS preview {s,tx,ty,a0,a}
+  // Raster maps only load whole zoom levels. To fit a group exactly (not up to
+  // 2x too far out) we load the next level up and shrink it a bit with CSS:
+  // effective zoom = map.getZoom() + log2(_mapScale), _mapScale in (0.5, 1].
+  // Shrinking (never enlarging) keeps the satellite photo sharp.
+  var _mapScale = 1;
+  var _mapPoints = [];         // every visible pin position (for Fit all / Centre me)
+  var _mapPinCache = {};       // key -> { el, html }
+
   function startLiveMap(){
-    if(_mapHeadingTimer) return;
-    // Request iOS compass permission if needed; either way, attach the listener.
-    // We attach BEFORE the permission resolves so any permission already granted
-    // by another feature (like Live radar) starts working immediately.
-    attachLiveMap();
-    if(typeof DeviceOrientationEvent !== 'undefined' &&
-       typeof DeviceOrientationEvent.requestPermission === 'function'){
-      DeviceOrientationEvent.requestPermission().catch(function(){});
-    }
-  }
-  function attachLiveMap(){
-    window.addEventListener('deviceorientation', onOrient, true);
-    window.addEventListener('deviceorientationabsolute', onOrient, true);
-    sizeMapForRotation(true);
-    // Keep gestures enabled — pinch-zoom still works via the underlying map.
-    // The touch overlay translates one-finger panning through the rotation
-    // so swipe direction matches finger direction.
-    attachTouchOverlay();
-    _mapHeadingTimer = setInterval(function(){
-      if(!map || !mapReady) return;
-      if(Math.abs(angleDiff(rawCompassHeading, mapHeading)) >= 2){
-        mapHeading = rawCompassHeading;
-        applyMapRotation();
-        rotatePhotoMarkers();
-      }
-    }, 200);
+    if(_liveMapOn) return;
+    _liveMapOn = true;
+    _mapSin = null; _mapCos = null;
+    window.addEventListener('deviceorientation', onMapOrient, true);
+    window.addEventListener('deviceorientationabsolute', onMapOrient, true);
+    window.addEventListener('resize', layoutMapBox);
+    requestMapCompass();
+    attachMapTouch();
+    layoutMapBox();
+    // Opening the tab: put me in the middle with everyone in view.
+    mapFollowMe = true; mapFitted = false;
+    if(mapReady) renderMap();
+    if(!_mapRaf) _mapRaf = requestAnimationFrame(mapFrame);
+    setTimeout(updateMapCompassUi, 2500);
+    updateMapCompassUi();
   }
   function stopLiveMap(){
-    if(_mapHeadingTimer){ clearInterval(_mapHeadingTimer); _mapHeadingTimer=null; }
-    mapHeading = 0;
-    var el = document.getElementById('mapRot');
-    if(el){ el.style.transform = ''; }
-    sizeMapForRotation(false);
-    detachTouchOverlay();
-    rotatePhotoMarkers();
+    _liveMapOn = false;
+    window.removeEventListener('deviceorientation', onMapOrient, true);
+    window.removeEventListener('deviceorientationabsolute', onMapOrient, true);
+    window.removeEventListener('resize', layoutMapBox);
+    if(_mapRaf){ cancelAnimationFrame(_mapRaf); _mapRaf = null; }
   }
 
-  // Touch overlay: when the map is rotated, a finger swipe in screen space
-  // doesn't match the map's pan direction. This overlay catches one-finger
-  // drags, rotates the delta through the current heading, and applies a
-  // corrected map.panBy(). Two-finger gestures (pinch) and taps fall through
-  // to the underlying Google Maps element by temporarily hiding the overlay.
-  var _touchState = null;
-  function attachTouchOverlay(){
+  // iOS only lets a page read the compass after the user allows it, and the
+  // request must come from a tap. Tapping the Active Hunt tab counts; if that
+  // didn't work, any tap on the map or the compass button asks again.
+  function requestMapCompass(){
+    try{
+      if(typeof DeviceOrientationEvent !== 'undefined' &&
+         typeof DeviceOrientationEvent.requestPermission === 'function'){
+        DeviceOrientationEvent.requestPermission().then(function(r){
+          if(r !== 'granted') updateMapCompassUi();
+        }).catch(function(){ updateMapCompassUi(); });
+      }
+    }catch(_){}
+  }
+
+  // Map-only compass listener. It does NOT touch the bok-logging dial.
+  function onMapOrient(e){
+    var h = headingFromEvent(e);
+    if(h === null) return;
+    var r = h*Math.PI/180, s = Math.sin(r), c = Math.cos(r);
+    if(_mapSin === null){ _mapSin = s; _mapCos = c; }
+    else { _mapSin += 0.2*(s-_mapSin); _mapCos += 0.2*(c-_mapCos); }
+    mapHeadingTarget = ((Math.atan2(_mapSin,_mapCos)*180/Math.PI)%360+360)%360;
+    if(!mapGotHeading){ mapGotHeading = true; updateMapCompassUi(); }
+  }
+
+  // Animation loop: ease the drawn heading toward the compass so the map
+  // turns smoothly instead of in steps.
+  function mapFrame(){
+    _mapRaf = null;
+    if(!_liveMapOn) return;
+    var target = (mapCompassOn && mapGotHeading) ? mapHeadingTarget : 0;
+    var d = angleDiff(target, mapHeading);
+    if(Math.abs(d) > 0.05){
+      mapHeading += (Math.abs(d) < 0.5) ? d : d*0.25;
+      mapHeading = ((mapHeading%360)+360)%360;
+      applyMapRotation();
+    }
+    _mapRaf = requestAnimationFrame(mapFrame);
+  }
+
+  function applyMapRotation(){
+    var rot = document.getElementById('mapRot');
+    if(rot) rot.style.transform = 'rotate(' + (-mapHeading) + 'deg)';
+    var n = document.getElementById('mapNorth');
+    if(n) n.style.transform = 'rotate(' + (-mapHeading) + 'deg)';
+    positionPins();
+  }
+
+  function updateMapCompassUi(){
+    var b = document.getElementById('mapCompassBtn');
+    var hint = document.getElementById('mapCompassHint');
+    if(b) b.classList.toggle('off', !mapCompassOn);
+    if(hint){
+      var show = _liveMapOn && mapCompassOn && !mapGotHeading;
+      hint.style.display = show ? '' : 'none';
+    }
+  }
+  function toggleMapCompass(){
+    if(!mapGotHeading){ mapCompassOn = true; requestMapCompass(); updateMapCompassUi(); return; }
+    mapCompassOn = !mapCompassOn;
+    toast(mapCompassOn ? 'Map turns with your phone' : 'North up');
+    updateMapCompassUi();
+  }
+
+  // Size the rotating square to the map box's diagonal, centred on the box.
+  function layoutMapBox(){
+    var wrap = document.getElementById('mapWrap');
+    var rot = document.getElementById('mapRot');
+    if(!wrap || !rot) return;
+    var w = wrap.clientWidth, h = wrap.clientHeight;
+    if(!w || !h) return;
+    if(w === _mapBox.w && h === _mapBox.h) return;
+    // Twice the diagonal, so it still covers the box when shrunk to 0.5x.
+    var s = Math.ceil(2*Math.sqrt(w*w + h*h)) + 4;
+    _mapBox = { w:w, h:h, s:s };
+    applyMapZoomCss();
+    rot.style.width = s + 'px';
+    rot.style.height = s + 'px';
+    rot.style.left = ((w - s)/2) + 'px';
+    rot.style.top = ((h - s)/2) + 'px';
+    try{ if(map) google.maps.event.trigger(map, 'resize'); }catch(_){}
+    positionPins();
+  }
+
+  // ---- Web Mercator helpers (256px world at zoom 0, same as Google) ----
+  function worldPt(lat, lng){
+    var s = Math.sin(lat*Math.PI/180);
+    s = Math.min(Math.max(s, -0.9999), 0.9999);
+    return { x: 256*(0.5 + lng/360), y: 256*(0.5 - Math.log((1+s)/(1-s))/(4*Math.PI)) };
+  }
+  function worldToLatLng(x, y){
+    var n = Math.PI*(1 - 2*y/256);
+    return { lat: 180/Math.PI*Math.atan(0.5*(Math.exp(n) - Math.exp(-n))), lng: (x/256 - 0.5)*360 };
+  }
+  // Screen offset (px from the middle of the map box) of a lat/lng right now.
+  function mapScreenOffset(lat, lng){
+    var c = map.getCenter(), cw = worldPt(c.lat(), c.lng()), p = worldPt(lat, lng);
+    var k = Math.pow(2, map.getZoom());
+    var dx = (p.x - cw.x)*k, dy = (p.y - cw.y)*k;          // north-up px
+    var r = -mapHeading*Math.PI/180, co = Math.cos(r), si = Math.sin(r), b = _mapScale;
+    return { x: b*(dx*co - dy*si), y: b*(dx*si + dy*co) };  // after CSS rotate + shrink
+  }
+  // The lat/lng that is currently drawn at a screen offset from the middle.
+  function mapLatLngAtOffset(ox, oy){
+    ox /= _mapScale; oy /= _mapScale;
+    var r = mapHeading*Math.PI/180, co = Math.cos(r), si = Math.sin(r);
+    var mx = ox*co - oy*si, my = ox*si + oy*co;              // undo rotation
+    var c = map.getCenter(), cw = worldPt(c.lat(), c.lng());
+    var k = Math.pow(2, map.getZoom());
+    return worldToLatLng(cw.x + mx/k, cw.y + my/k);
+  }
+
+  function positionPins(){
+    if(!map || !mapReady || !_mapBox.w) return;
+    var cx = _mapBox.w/2, cy = _mapBox.h/2, pv = _mapPreview;
+    for(var key in _mapPinCache){
+      var p = _mapPinCache[key];
+      var o = mapScreenOffset(p.lat, p.lng);
+      var x = cx + o.x, y = cy + o.y;
+      if(pv){ x = pv.s*x + pv.tx; y = pv.s*y + pv.ty; }
+      p.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
+    }
+  }
+
+  // ---- gestures ----
+  var _ptrs = {}, _g = null, _lastTap = 0, _lastTapPt = null, _wheelAt = 0, _touchAttached = false;
+  function attachMapTouch(){
+    if(_touchAttached) return;
     var t = document.getElementById('mapTouch');
     if(!t) return;
-    t.style.display = 'block';
-    t.addEventListener('touchstart', onTouchStart, { passive: false });
-    t.addEventListener('touchmove', onTouchMove, { passive: false });
-    t.addEventListener('touchend', onTouchEnd, { passive: false });
-    t.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    _touchAttached = true;
+    t.addEventListener('pointerdown', onMapPtrDown);
+    t.addEventListener('pointermove', onMapPtrMove);
+    t.addEventListener('pointerup', onMapPtrUp);
+    t.addEventListener('pointercancel', onMapPtrUp);
+    t.addEventListener('wheel', onMapWheel, { passive:false });
+    // Stop iOS page-zoom / scroll gestures from fighting the map.
+    t.addEventListener('touchstart', function(e){ e.preventDefault(); }, { passive:false });
+    t.addEventListener('touchmove', function(e){ e.preventDefault(); }, { passive:false });
+    t.addEventListener('gesturestart', function(e){ e.preventDefault(); });
   }
-  function detachTouchOverlay(){
-    var t = document.getElementById('mapTouch');
-    if(!t) return;
-    t.style.display = 'none';
-    t.removeEventListener('touchstart', onTouchStart);
-    t.removeEventListener('touchmove', onTouchMove);
-    t.removeEventListener('touchend', onTouchEnd);
-    t.removeEventListener('touchcancel', onTouchEnd);
+  function mapLocalPt(e){
+    var r = document.getElementById('mapWrap').getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
-  function onTouchStart(e){
-    if(e.touches.length !== 1){
-      // Pinch/multi-touch: let Google Maps handle it by hiding the overlay.
-      _touchState = null;
-      var t = document.getElementById('mapTouch');
-      if(t) t.style.pointerEvents = 'none';
-      return;
-    }
-    _touchState = {
-      lastX: e.touches[0].clientX,
-      lastY: e.touches[0].clientY,
-      startX: e.touches[0].clientX,
-      startY: e.touches[0].clientY,
-      moved: false,
-      startTime: Date.now()
-    };
+  function ptrList(){ var a=[]; for(var k in _ptrs) a.push(_ptrs[k]); return a; }
+  function ptrMid(){
+    var a = ptrList(), x=0, y=0;
+    a.forEach(function(p){ x+=p.x; y+=p.y; });
+    return { x: x/a.length, y: y/a.length };
   }
-  function onTouchMove(e){
-    if(!_touchState || e.touches.length !== 1) return;
-    var tx = e.touches[0].clientX, ty = e.touches[0].clientY;
-    var dx = tx - _touchState.lastX, dy = ty - _touchState.lastY;
-    _touchState.lastX = tx; _touchState.lastY = ty;
-    // Only consider it a "drag" past a small threshold so taps still register.
-    var totalDx = tx - _touchState.startX, totalDy = ty - _touchState.startY;
-    if(!_touchState.moved && (Math.abs(totalDx) > 5 || Math.abs(totalDy) > 5)){
-      _touchState.moved = true;
-    }
-    if(!_touchState.moved) return;
-    // Rotate the finger delta by +mapHeading to undo the map's -mapHeading
-    // visual rotation, so panBy moves the map in the same direction as the finger.
-    var rad = mapHeading * Math.PI/180;
-    var c = Math.cos(rad), s = Math.sin(rad);
-    var mapDx = dx * c - dy * s;
-    var mapDy = dx * s + dy * c;
-    // panBy expects pixels in map space; negate because dragging right should
-    // pan the world left.
-    try { map.panBy(-mapDx, -mapDy); } catch(_){}
+  function ptrSpread(){
+    var a = ptrList(); if(a.length < 2) return 1;
+    return Math.max(10, Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y));
+  }
+  function startMapGesture(){
+    commitMapPreview();
+    var n = ptrList().length;
+    _g = n ? { n:n, m0:ptrMid(), last:ptrMid(), d0:ptrSpread(), moved:false, t0:Date.now() } : null;
+  }
+  function onMapPtrDown(e){
+    if(!map || !mapReady) return;
+    try{ e.target.setPointerCapture(e.pointerId); }catch(_){}
+    if(!mapGotHeading && mapCompassOn) requestMapCompass();
+    _ptrs[e.pointerId] = mapLocalPt(e);
+    startMapGesture();
     e.preventDefault();
   }
-  function onTouchEnd(e){
-    var t = document.getElementById('mapTouch');
-    // If it was a tap (didn't move much), pass it through to underlying map.
-    if(_touchState && !_touchState.moved && (Date.now() - _touchState.startTime) < 300){
-      if(t) t.style.pointerEvents = 'none';
-      setTimeout(function(){ if(t) t.style.pointerEvents = 'auto'; }, 50);
-    } else if(t){
-      // Restore pointerEvents for next gesture (may have been disabled for pinch).
-      t.style.pointerEvents = 'auto';
+  function onMapPtrMove(e){
+    if(!_ptrs[e.pointerId] || !_g) return;
+    _ptrs[e.pointerId] = mapLocalPt(e);
+    var m = ptrMid();
+    if(!_g.moved){
+      var far = Math.hypot(m.x-_g.m0.x, m.y-_g.m0.y) > 6;
+      var pinch = _g.n >= 2 && Math.abs(ptrSpread()/_g.d0 - 1) > 0.04;
+      if(!far && !pinch) return;
+      _g.moved = true;
     }
-    _touchState = null;
-  }
-  // Apply the current rotation to the map container. Negative because we want
-  // the heading at the TOP — rotating the map by -heading places the heading
-  // direction upward.
-  function applyMapRotation(){
-    var el = document.getElementById('mapRot');
-    if(!el) return;
-    el.style.transformOrigin = '50% 50%';
-    el.style.transform = 'rotate(' + (-mapHeading) + 'deg)';
-  }
-  function sizeMapForRotation(big){
-    var rot = document.getElementById('mapRot');
-    if(!rot) return;
-    if(big){
-      // Enlarge the rotation wrapper so its rotated corners always cover the
-      // visible map area. sqrt(2) ≈ 1.42 covers any angle.
-      var s = 1.45;
-      var pct = ((s-1)/2 * 100).toFixed(2);
-      rot.style.top = '-' + pct + '%';
-      rot.style.left = '-' + pct + '%';
-      rot.style.width = (s*100).toFixed(2) + '%';
-      rot.style.height = (s*100).toFixed(2) + '%';
-      rot.style.right = 'auto';
-      rot.style.bottom = 'auto';
-      try { google.maps.event.trigger(map, 'resize'); } catch(_){}
+    if(_g.n === 1){
+      // Drag: the map follows the finger exactly, whatever the rotation.
+      panMapByScreen(m.x - _g.last.x, m.y - _g.last.y);
+      _g.last = m;
+      if(mapFollowMe){ mapFollowMe = false; }
     } else {
-      rot.style.top = '';
-      rot.style.left = '';
-      rot.style.right = '';
-      rot.style.bottom = '';
-      rot.style.width = '';
-      rot.style.height = '';
-      rot.style.inset = '0';
-      rot.style.transform = '';
-      try { google.maps.event.trigger(map, 'resize'); } catch(_){}
+      // Pinch: show a smooth CSS zoom now, snap the real map zoom on release.
+      var s = ptrSpread()/_g.d0;
+      var z = mapEffZoom();
+      s = Math.min(Math.max(s, Math.pow(2, MAP_MIN_ZOOM - z)), Math.pow(2, MAP_MAX_ZOOM - z));
+      var C = { x:_mapBox.w/2, y:_mapBox.h/2 };
+      // While following me, zoom around me (the middle) so I stay centred.
+      var a0 = mapFollowMe ? C : _g.m0, a = mapFollowMe ? C : m;
+      _mapPreview = { s:s, tx:a.x - s*a0.x, ty:a.y - s*a0.y, a0:a0, a:a };
+      applyMapZoomCss();
+      positionPins();
     }
+    e.preventDefault();
   }
-  // Keep the map centred on the user's chair (or last known position) so the
-  // user is always at the rotation pivot.
-  // Manual "Centre me" button: just recentre, don't change zoom.
-  function centreOnMe(){ recentreOnMe(); }
-
-  function recentreOnMe(){
+  function onMapPtrUp(e){
+    if(!_ptrs[e.pointerId]) return;
+    delete _ptrs[e.pointerId];
+    var g = _g;
+    if(g && !g.moved && g.n === 1 && !ptrList().length && Date.now() - g.t0 < 300){
+      var now = Date.now();
+      if(_lastTapPt && now - _lastTap < 350 && Math.hypot(g.m0.x-_lastTapPt.x, g.m0.y-_lastTapPt.y) < 40){
+        zoomMapAt(mapFollowMe ? null : g.m0, 1);   // double-tap: zoom in
+        _lastTap = 0; _lastTapPt = null;
+      } else { _lastTap = now; _lastTapPt = g.m0; }
+    }
+    startMapGesture();   // re-anchor any finger still down (and commit a pinch)
+  }
+  function onMapWheel(e){
+    e.preventDefault();
+    var now = Date.now();
+    if(now - _wheelAt < 250 || !e.deltaY) return;
+    _wheelAt = now;
+    zoomMapAt(mapFollowMe ? null : mapLocalPt(e), e.deltaY < 0 ? 1 : -1);
+  }
+  function panMapByScreen(dx, dy){
     if(!map) return;
-    var c = null;
-    if(state.chair && isFinite(Number(state.chair.lat)) && isFinite(Number(state.chair.lng))){
-      c = { lat: Number(state.chair.lat), lng: Number(state.chair.lng) };
-    } else if(lastGroup && lastGroup.hunters){
-      var myname = (state.name||'').toLowerCase();
-      for(var i=0;i<lastGroup.hunters.length;i++){
-        var h = lastGroup.hunters[i];
-        if((h.hunter||'').toLowerCase() === myname && isFinite(Number(h.lat)) && isFinite(Number(h.lng))){
-          c = { lat: Number(h.lat), lng: Number(h.lng) }; break;
-        }
+    map.setCenter(mapLatLngAtOffset(-dx, -dy));
+    positionPins();
+  }
+  // Turn a finished pinch preview into a real zoom level + centre. Zoom is
+  // continuous (see _mapScale), so the map stays exactly where you let go.
+  function commitMapPreview(){
+    var pv = _mapPreview;
+    if(!pv) return;
+    _mapPreview = null;
+    applyMapZoom(Math.log(pv.s)/Math.LN2, pv.a0, pv.a);
+  }
+  function mapEffZoom(){ return map.getZoom() + Math.log(_mapScale)/Math.LN2; }
+  function setMapEffZoom(Z){
+    Z = Math.min(MAP_MAX_ZOOM, Math.max(MAP_MIN_ZOOM, Z));
+    var z = Math.ceil(Z - 1e-6);
+    _mapScale = Math.pow(2, Z - z);
+    if(map.getZoom() !== z) map.setZoom(z);
+    applyMapZoomCss();
+  }
+  // #mapZoom = (pinch preview) after (shrink by _mapScale around the middle).
+  function applyMapZoomCss(){
+    var mz = document.getElementById('mapZoom');
+    if(!mz) return;
+    var b = _mapScale, pv = _mapPreview, cx = _mapBox.w/2, cy = _mapBox.h/2;
+    var S = b, tx = (1-b)*cx, ty = (1-b)*cy;
+    if(pv){ S = pv.s*b; tx = pv.s*tx + pv.tx; ty = pv.s*ty + pv.ty; }
+    mz.style.transform = (S === 1 && !tx && !ty) ? '' :
+      'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px) scale(' + S.toFixed(5) + ')';
+  }
+  // Zoom by dz levels (can be fractional) so the point drawn at a0 ends up at a.
+  function applyMapZoom(dz, a0, a){
+    var Z0 = mapEffZoom();
+    var Z1 = Math.min(MAP_MAX_ZOOM, Math.max(MAP_MIN_ZOOM, Z0 + dz));
+    var k = Math.pow(2, Z1 - Z0);
+    var C = { x:_mapBox.w/2, y:_mapBox.h/2 };
+    var nc = mapLatLngAtOffset(a0.x + (C.x - a.x)/k - C.x, a0.y + (C.y - a.y)/k - C.y);
+    setMapEffZoom(Z1);
+    map.setCenter(nc);
+    positionPins();
+  }
+  function zoomMapAt(pt, dz){
+    if(!map || !mapReady) return;
+    if(!pt) pt = { x:_mapBox.w/2, y:_mapBox.h/2 };
+    applyMapZoom(dz, pt, pt);
+  }
+  function mapZoomIn(){ zoomMapAt(null, 1); }
+  function mapZoomOut(){ zoomMapAt(null, -1); }
+
+  // ---- who am I, and fitting the view ----
+  // My own position: my chair (or a driver's live GPS) from this phone, else
+  // my row from the server. Never "whoever is near the middle of the group".
+  function myMapPosition(){
+    if(!viewingPastCode && state.chair){
+      var lat = Number(state.chair.lat), lng = Number(state.chair.lng);
+      if(isFinite(lat) && isFinite(lng) && !(lat===0 && lng===0)) return { lat:lat, lng:lng };
+    }
+    var hs = (lastGroup && lastGroup.hunters) || [];
+    for(var i=0;i<hs.length;i++){
+      if(isMine(hs[i].hunter)){
+        var hl = Number(hs[i].lat), hg = Number(hs[i].lng);
+        if(isFinite(hl) && isFinite(hg) && !(hl===0 && hg===0)) return { lat:hl, lng:hg };
       }
     }
-    if(!c) return;
-    // Build a SYMMETRIC bounds box around me: my position ± the farthest
-    // visible marker's distance in lat/lng. fitBounds then picks the zoom
-    // that fits this box, and because the box is centred on me, I end up
-    // in the middle of the viewport.
-    var maxDLat = 0, maxDLng = 0;
-    (lastGroup && lastGroup.hunters || []).forEach(function(h){
-      var lat = Number(h.lat), lng = Number(h.lng);
-      if(!isFinite(lat) || !isFinite(lng)) return;
-      if(whoFilter==='me' && !isMine(h.hunter)) return;
-      maxDLat = Math.max(maxDLat, Math.abs(lat - c.lat));
-      maxDLng = Math.max(maxDLng, Math.abs(lng - c.lng));
+    return null;
+  }
+  // Zoom so every visible pin fits in the box around `centre` AT ANY ROTATION
+  // (a circle, since the map keeps turning), leaving room for photos + names.
+  function fitMapAround(centre){
+    if(!map || !mapReady) return;
+    layoutMapBox();
+    var cw = worldPt(centre.lat, centre.lng), R = 0;
+    _mapPoints.forEach(function(p){
+      var w = worldPt(p.lat, p.lng);
+      R = Math.max(R, Math.hypot(w.x - cw.x, w.y - cw.y));
     });
-    if(bucksVisible()){
-      (lastGroup && lastGroup.bucks || []).forEach(function(b){
-        var blat = Number(b.buckLat), blng = Number(b.buckLng);
-        if(!isFinite(blat) || !isFinite(blng)) return;
-        if(whoFilter==='me' && !isMine(b.hunter)) return;
-        maxDLat = Math.max(maxDLat, Math.abs(blat - c.lat));
-        maxDLng = Math.max(maxDLng, Math.abs(blng - c.lng));
-      });
-    }
-    // If no other markers, pick a small default box (~100m radius).
-    if(maxDLat===0 && maxDLng===0){ maxDLat = 0.0009; maxDLng = 0.0009; }
-    var bounds = new google.maps.LatLngBounds(
-      { lat: c.lat - maxDLat, lng: c.lng - maxDLng },
-      { lat: c.lat + maxDLat, lng: c.lng + maxDLng }
-    );
-    try { map.fitBounds(bounds, 60); } catch(_){}
+    var rpx = Math.max(60, Math.min(_mapBox.w, _mapBox.h)/2 - 42);
+    var Z = (R > 0) ? Math.log(rpx / R)/Math.LN2 : 17;
+    setMapEffZoom(Math.min(Z, 18));
+    map.setCenter(centre);
+    positionPins();
   }
-  // Compute the great-circle distance in metres between two lat/lng points.
-  function haversine(a, b){
-    var R = 6371000;
-    var toRad = function(d){ return d*Math.PI/180; };
-    var dLat = toRad(b.lat - a.lat);
-    var dLng = toRad(b.lng - a.lng);
-    var lat1 = toRad(a.lat), lat2 = toRad(b.lat);
-    var x = Math.sin(dLat/2)*Math.sin(dLat/2) +
-            Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)*Math.sin(dLng/2);
-    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+  function fitAllOnMap(){
+    if(!map || !mapReady) return;
+    mapFitted = true;
+    if(!_mapPoints.length) return;
+    var minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    _mapPoints.forEach(function(p){
+      var w = worldPt(p.lat, p.lng);
+      minX = Math.min(minX, w.x); maxX = Math.max(maxX, w.x);
+      minY = Math.min(minY, w.y); maxY = Math.max(maxY, w.y);
+    });
+    mapFollowMe = false;
+    fitMapAround(worldToLatLng((minX+maxX)/2, (minY+maxY)/2));
   }
-  // Maximum metres between centre c and any visible hunter/bok marker.
-  function farthestMarkerDistance(c){
-    var maxD = 0;
-    if(lastGroup){
-      (lastGroup.hunters||[]).forEach(function(h){
-        var lat = Number(h.lat), lng = Number(h.lng);
-        if(!isFinite(lat) || !isFinite(lng)) return;
-        if(whoFilter==='me' && !isMine(h.hunter)) return;
-        var d = haversine(c, {lat:lat, lng:lng});
-        if(d > maxD) maxD = d;
-      });
-      if(bucksVisible()){
-        (lastGroup.bucks||[]).forEach(function(b){
-          var blat = Number(b.buckLat), blng = Number(b.buckLng);
-          if(!isFinite(blat) || !isFinite(blng)) return;
-          if(whoFilter==='me' && !isMine(b.hunter)) return;
-          var d = haversine(c, {lat:blat, lng:blng});
-          if(d > maxD) maxD = d;
-        });
-      }
-    }
-    return maxD;
-  }
-  // Choose a Google Maps zoom level so a given radius (metres) fits within the
-  // map's visible half-width. Approx: metres-per-pixel at zoom z and latitude φ
-  // is 156543.03 * cos(φ) / 2^z. With ~180px half-viewport (with 80px padding
-  // for marker labels), the zoom that fits radius is:
-  //   z = log2(156543.03 * cos(φ) * 180 / radius)
-  function zoomForRadius(radius){
-    if(!radius || radius < 5) return 18;
-    var lat = (state.chair && Number(state.chair.lat)) || -30;
-    // halfPx ~ visible half-width minus margin for marker labels (~140px wide).
-    // Smaller halfPx => more margin (more zoom-out). Bumping up the labels'
-    // width budget so the furthest hunter's name doesn't get clipped.
-    var halfPx = 130;
-    var z = Math.log2(156543.03 * Math.cos(lat*Math.PI/180) * halfPx / radius);
-    z = Math.floor(z);
-    if(z < 10) z = 10;     // allow very wide views for spread-out groups
-    if(z > 19) z = 19;
-    return z;
-  }
-  // The map container is rotated by -mapHeading via CSS, so a marker drawn at
-  // default orientation also visually rotates by -mapHeading. We counter that
-  // by rotating the marker's content by +mapHeading so photos/icons stay
-  // upright on screen.
-  function rotatePhotoMarkers(){
-    if(!mapMarkers) return;
-    for(var i=0;i<mapMarkers.length;i++){
-      var m = mapMarkers[i];
-      if(!m) continue;
-      if(m._photoKey){
-        var entry = _photoIconCache[m._photoKey];
-        if(entry){
-          try { m.setIcon(iconWithRotation(entry, mapHeading, m._displayName)); } catch(_){}
-        }
-      } else if(m._driverColor){
-        var col = m._driverColor;
-        var dn = (m._displayName||'').replace(/[<>&]/g,'');
-        var W = 140, H = 140, cx = W/2, cy = H/2 - 6;
-        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'
-          + '<g transform="rotate('+mapHeading+' '+cx+' '+cy+')">'
-          + '<circle cx="'+cx+'" cy="'+cy+'" r="18" fill="#1d2017" stroke="'+col+'" stroke-width="2"/>'
-          + '<text x="'+cx+'" y="'+(cy+7)+'" text-anchor="middle" font-size="22">🚙</text>'
-          + '<text x="'+cx+'" y="'+(cy+30)+'" text-anchor="middle" font-size="12" font-weight="700" '
-          +   'fill="#ffffff" stroke="#000000" stroke-width="3" paint-order="stroke">'+dn+'</text>'
-          + '</g>'
-          + '</svg>';
-        try {
-          m.setIcon({
-            url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-            scaledSize: new google.maps.Size(W, H),
-            anchor: new google.maps.Point(cx, cy)
-          });
-        } catch(_){}
-      } else if(m._bokFill){
-        try { m.setIcon(bokIcon(m._bokFill, m._bokLabel, mapHeading)); } catch(_){}
-      }
-    }
+  // Centre me: exactly like Fit all (everyone in view), but with ME in the
+  // middle. It then keeps me in the middle as I move, until I drag the map.
+  function centreOnMe(){
+    if(!map || !mapReady) return;
+    mapFitted = true;
+    var me = myMapPosition();
+    if(!me){ toast('Your position isn’t known yet — showing everyone'); fitAllOnMap(); return; }
+    mapFollowMe = true;
+    fitMapAround(me);
   }
 
   // ---------- identity ----------
@@ -2144,7 +2266,6 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
         if(res && res.ok){
           try{ localStorage.removeItem(PKEY); }catch(e){}
           updatePendingBadge();
-          mapFitted=false;
           if(state.view==='all') refreshGroup(false);
         }
       })
@@ -2944,9 +3065,15 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var center = mapCenter();
       map = new google.maps.Map(document.getElementById('map'), {
         center: center, zoom: 15, mapTypeId: 'hybrid',
-        disableDefaultUI: true, zoomControl: true, gestureHandling: 'greedy'
+        // Gestures and zoom buttons are ours (see #mapTouch), because Google's
+        // don't know the map is rotated.
+        disableDefaultUI: true, gestureHandling: 'none', keyboardShortcuts: false,
+        clickableIcons: false, minZoom: MAP_MIN_ZOOM, maxZoom: MAP_MAX_ZOOM
       });
       mapReady = true;
+      map.addListener('center_changed', positionPins);
+      map.addListener('zoom_changed', positionPins);
+      layoutMapBox();
       msg.classList.add('hide');
       // If we already have group data, render it; otherwise trigger a refresh
       // so the map populates with the current hunters/bokke (was rendering
@@ -2976,238 +3103,108 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   }
 
   function clearMarkers(){
-    for(var i=0;i<mapMarkers.length;i++){
-      try{ mapMarkers[i].setMap(null); }catch(e){}
-      try{ mapMarkers[i].map = null; }catch(e){}
+    var layer = document.getElementById('mapPins');
+    if(layer) layer.innerHTML = '';
+    _mapPinCache = {};
+  }
+
+  function pinAttr(s){
+    return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+      .replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  // HTML for one person: photo (or dot / vehicle) with the name underneath.
+  function personPinHtml(name, photo, role, mine){
+    var color = colorFor(name);
+    var label = mine ? 'You' : name;
+    var body;
+    if(role === 'driver'){
+      body = '<div class="mp-car" style="border-color:'+color+'">🚙</div>';
+    } else if(photo){
+      body = '<div class="mp-ph" style="border-color:'+color+'"><img alt="" src="'+pinAttr(photo)+'"></div>';
+    } else {
+      body = '<div class="mp-dot" style="background:'+color+'"></div>';
     }
-    mapMarkers = [];
+    return body + '<div class="mp-nm">'+pinAttr(label)+'</div>';
   }
 
   function renderMap(){
     if(!mapReady || !map) return;
-    clearMarkers();
-    var bounds = new google.maps.LatLngBounds();
-    var any = false;
-
-    // Track which hunter names the server already has a position for, so we
-    // don't double-draw ourselves once our ping comes back.
+    layoutMapBox();
+    var layer = document.getElementById('mapPins');
+    if(!layer) return;
+    var want = [];        // { key, lat, lng, html, cls, z }
     var shownNames = {};
 
+    if(bucksVisible()){
+      lastGroup.bucks.forEach(function(b){
+        var blat = Number(b.buckLat), blng = Number(b.buckLng);
+        if(!isFinite(blat) || !isFinite(blng) || (blat===0 && blng===0)) return;
+        if(whoFilter==='me' && !isMine(b.hunter)) return;
+        var fill = b.collected ? '#5dca7a' : colorFor(b.hunter);
+        var label = b.collected ? '✓' : String(b.number);
+        want.push({ key:'b|'+b.hunter+'|'+b.number+'|'+blat+'|'+blng, lat:blat, lng:blng, cls:'', z:1,
+          html:'<div class="mp-bok" style="background:'+fill+'">'+pinAttr(label)+'</div>' });
+      });
+    }
+
+    var meDrawn = false;
     lastGroup.hunters.forEach(function(h){
-      try {
       var lat = Number(h.lat), lng = Number(h.lng);
       if(!isFinite(lat) || !isFinite(lng) || (lat===0 && lng===0)) return;
       if(whoFilter==='me' && !isMine(h.hunter)) return;
-      var pos = { lat:lat, lng:lng };
-      shownNames[(h.hunter||'').toLowerCase()] = true;
-      var photo = isMine(h.hunter) ? (state.photo || h.photo) : h.photo;
-      var hm = makeHunterMarker(pos, h.hunter, photo, h.role||'hunter');
-      mapMarkers.push(hm);
-      // Photo markers already include the name in their SVG; only add a
-      // separate label for plain-dot fallback markers.
-      if(!hm._photoKey && !hm._driverColor) addNameTag(pos, h.hunter);
-      bounds.extend(pos); any = true;
-      } catch(err){ /* skip this hunter on error */ }
+      var key = (h.hunter||'').toLowerCase();
+      if(shownNames[key]) return;
+      shownNames[key] = true;
+      var mine = isMine(h.hunter);
+      if(mine){
+        // Draw me where THIS phone says I am (freshest, esp. for a driver).
+        var me = myMapPosition();
+        if(me){ lat = me.lat; lng = me.lng; }
+        meDrawn = true;
+      }
+      var photo = mine ? (state.photo || h.photo) : h.photo;
+      var role = h.role || 'hunter';
+      want.push({ key:'h|'+key, lat:lat, lng:lng, cls: mine ? ' me' : '', z: mine ? 4 : (role==='driver' ? 3 : 2),
+        html: personPinHtml(h.hunter||'', photo, role, mine) });
     });
 
-    // Always show my own current chair from local GPS — works even solo and
-    // even before my position has round-tripped through the server.
-    if(state.chair && state.name && !shownNames[state.name.toLowerCase()]){
-      var me = { lat:Number(state.chair.lat), lng:Number(state.chair.lng) };
-      var mm = makeHunterMarker(me, state.name+' (you)', state.photo, state.role||'hunter');
-      mapMarkers.push(mm);
-      if(!mm._photoKey && !mm._driverColor) addNameTag(me, state.name);
-      bounds.extend(me); any = true;
-    }
-
-    if(bucksVisible()){
-    lastGroup.bucks.forEach(function(b){
-      var blat = Number(b.buckLat), blng = Number(b.buckLng);
-      if(!isFinite(blat) || !isFinite(blng) || (blat===0 && blng===0)) return;
-      if(whoFilter==='me' && !isMine(b.hunter)) return;
-      var pos = { lat:blat, lng:blng };
-      var fill = b.collected ? '#5dca7a' : colorFor(b.hunter);
-      var label = String(b.collected ? '\u2713' : b.number);
-      var bm = new google.maps.Marker({
-        map: map, position: pos,
-        title: b.hunter+' bok #'+b.number+' ('+(b.distance||'?')+'m)'+(b.collected?' — collected':''),
-        icon: bokIcon(fill, label, mapHeading)
-      });
-      bm._bokFill = fill;
-      bm._bokLabel = label;
-      mapMarkers.push(bm);
-      bounds.extend(pos); any = true;
-    });
-    }
-
-    if(any && !bounds.isEmpty()){
-      // Re-fit when the set of visible markers grows or shrinks, not just first time.
-      var sig = mapMarkers.length;
-      if(!mapFitted || sig !== lastFitSig){
-        map.fitBounds(bounds, 60);
-        mapFitted = true;
-        lastFitSig = sig;
+    // My own chair from local GPS — works solo and before my ping round-trips.
+    if(!meDrawn && !viewingPastCode && state.name){
+      var mp = myMapPosition();
+      if(mp){
+        want.push({ key:'h|'+state.name.toLowerCase(), lat:mp.lat, lng:mp.lng, cls:' me', z:4,
+          html: personPinHtml(state.name, state.photo, state.role||'hunter', true) });
       }
     }
-  }
-  var lastFitSig = -1;
-  function fitAllOnMap(){ mapFitted = false; lastFitSig = -1; renderMap(); }
 
-  // A simple colored circle marker icon (no external image, no AdvancedMarker).
-  // Build a chair marker: circular photo (with coloured ring) if the hunter has
-  // a profile pic, otherwise the plain coloured dot.
-  function makeHunterMarker(pos, title, photo, role){
-    var name = title.replace(' (you)','');
-    var color = colorFor(name);
-    if(role === 'driver'){
-      var displayName = title.replace(' (you)','').replace(/[<>&]/g,'');
-      var W = 140, H = 140, cx = W/2, cy = H/2 - 6;
-      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'
-        + '<g transform="rotate('+mapHeading+' '+cx+' '+cy+')">'
-        + '<circle cx="'+cx+'" cy="'+cy+'" r="18" fill="#1d2017" stroke="'+color+'" stroke-width="2"/>'
-        + '<text x="'+cx+'" y="'+(cy+7)+'" text-anchor="middle" font-size="22">🚙</text>'
-        + '<text x="'+cx+'" y="'+(cy+30)+'" text-anchor="middle" font-size="12" font-weight="700" '
-        +   'fill="#ffffff" stroke="#000000" stroke-width="3" paint-order="stroke">'+displayName+'</text>'
-        + '</g>'
-        + '</svg>';
-      var url = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-      var dmarker = new google.maps.Marker({
-        map: map, position: pos, title: title+' (driver)',
-        icon: { url:url, scaledSize:new google.maps.Size(W,H), anchor:new google.maps.Point(cx, cy) },
-        zIndex: 6
-      });
-      dmarker._driverColor = color;
-      dmarker._displayName = displayName;
-      return dmarker;
-    }
-    if(photo){
-      var displayName = title.replace(' (you)','');
-      var icon = circlePhotoIcon(photo, color, displayName);
-      if(icon){
-        var marker = new google.maps.Marker({ map:map, position:pos, title:title, icon:icon, zIndex:5 });
-        marker._photoKey = color + '|' + photo.length + '|' + photo.substring(0,32);
-        marker._displayName = displayName;
-        return marker;
+    // Reuse pins whose content didn't change (no image flicker on each poll).
+    var next = {};
+    want.forEach(function(w){
+      var old = _mapPinCache[w.key];
+      var el;
+      if(old && old.html === w.html && old.cls === w.cls){ el = old.el; delete _mapPinCache[w.key]; }
+      else {
+        if(old){ try{ old.el.remove(); }catch(_){} delete _mapPinCache[w.key]; }
+        el = document.createElement('div');
+        el.className = 'mpin' + w.cls;
+        el.style.zIndex = w.z;
+        el.innerHTML = w.html;
+        layer.appendChild(el);
       }
-    }
-    return new google.maps.Marker({
-      map: map, position: pos, title: title,
-      label: { text: '\u25C6', color: '#fff', fontSize: '14px' },
-      icon: dotIcon(color, 13)
+      next[w.key] = { el:el, html:w.html, cls:w.cls, lat:w.lat, lng:w.lng };
     });
-  }
+    for(var k in _mapPinCache){ try{ _mapPinCache[k].el.remove(); }catch(_){} }
+    _mapPinCache = next;
+    _mapPoints = want.map(function(w){ return { lat:w.lat, lng:w.lng }; });
 
-  // Renders a profile photo into a circular SVG icon with a coloured ring.
-  // Cached per photo. The SVG wraps the image in a <g rotate(...)> so we can
-  // counter-rotate later (when the map heading changes) without rebuilding.
-  var _photoIconCache = {};   // key -> { dataUrl (base for img), ring }
-  var _photoLoading = {};
-  var _photoRerenderScheduled = false;
-  function circlePhotoIcon(photo, ring, name){
-    try{
-      var key = ring + '|' + photo.length + '|' + photo.substring(0,32);
-      if(_photoIconCache[key]) return iconWithRotation(_photoIconCache[key], mapHeading, name);
-      if(_photoLoading[key]) return null;
-      _photoLoading[key] = true;
-      var imgObj = new Image();
-      imgObj.onload = function(){
-        // Bake the photo into a clipped circle PNG (data URL) — this is the
-        // raster part that gets embedded into the SVG icon as an <image>.
-        var D = 38, scale = 2, C = D*scale;
-        var canvas = document.createElement('canvas');
-        canvas.width = C; canvas.height = C;
-        var ctx = canvas.getContext('2d');
-        ctx.save();
-        ctx.beginPath(); ctx.arc(C/2, C/2, C/2-scale, 0, Math.PI*2); ctx.clip();
-        ctx.drawImage(imgObj, scale, scale, C-2*scale, C-2*scale);
-        ctx.restore();
-        _photoIconCache[key] = { png: canvas.toDataURL('image/png'), ring: ring };
-        delete _photoLoading[key];
-        if(!_photoRerenderScheduled){
-          _photoRerenderScheduled = true;
-          setTimeout(function(){ _photoRerenderScheduled = false; renderMap(); }, 150);
-        }
-      };
-      imgObj.onerror = function(){ delete _photoLoading[key]; };
-      imgObj.src = photo;
-      return null;
-    }catch(e){ return null; }
-  }
-  // Build a Google-Maps marker icon from a cached photo + a rotation angle.
-  // Counter-rotates the photo content so the face stays upright while the map
-  // rotates underneath it. The wrapper SVG itself is map-aligned.
-  // Build a Google-Maps marker icon: circular photo + hunter name below.
-  // Both the photo and the name sit inside a single rotation group so they
-  // counter-rotate together when the map heading changes, staying upright.
-  function iconWithRotation(entry, deg, name){
-    // The icon canvas must be big enough that, at any rotation, the photo +
-    // name both stay inside it (Google Maps clips marker icons to their
-    // declared bounds). 140x140 is comfortably square so rotation doesn't
-    // chop off the name.
-    var D = 38, W = 140, H = 140;
-    var cx = W/2, cy = H/2 - 6;       // photo sits a hair above centre
-    var nm = (name||'').replace(/[<>&]/g,'');
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'
-            + '<g transform="rotate('+deg+' '+cx+' '+cy+')">'
-            + '<image href="'+entry.png+'" x="'+(cx-D/2)+'" y="'+(cy-D/2)+'" width="'+D+'" height="'+D+'"/>'
-            + '<circle cx="'+cx+'" cy="'+cy+'" r="'+(D/2-1)+'" fill="none" stroke="'+entry.ring+'" stroke-width="2"/>'
-            + '<text x="'+cx+'" y="'+(cy+D/2+13)+'" text-anchor="middle" font-size="12" font-weight="700" '
-            +   'fill="#ffffff" stroke="#000000" stroke-width="3" paint-order="stroke">'+nm+'</text>'
-            + '</g>'
-            + '</svg>';
-    return {
-      url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-      scaledSize: new google.maps.Size(W, H),
-      anchor: new google.maps.Point(cx, cy)
-    };
-  }
-
-  // SVG bok marker — circle + counter-rotated number/tick so it stays upright
-  // when the rotating map turns underneath.
-  function bokIcon(fill, label, deg){
-    var W = 40, H = 40, cx = W/2, cy = H/2;
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'
-      + '<circle cx="'+cx+'" cy="'+cy+'" r="14" fill="'+fill+'" stroke="#fff" stroke-width="2"/>'
-      + '<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" font-size="13" font-weight="700" '
-      +   'fill="#06243f" transform="rotate('+deg+' '+cx+' '+cy+')">'+label+'</text>'
-      + '</svg>';
-    return {
-      url: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-      scaledSize: new google.maps.Size(W, H),
-      anchor: new google.maps.Point(cx, cy)
-    };
-  }
-
-  function dotIcon(color, r){
-    return {
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor: color, fillOpacity: 1,
-      strokeColor: '#fff', strokeWeight: 2,
-      scale: r
-    };
-  }
-
-  // Drops a transparent marker at the same spot whose only purpose is to show
-  // the hunter's name as a readable label just below their chair dot.
-  function addNameTag(pos, name){
-    if(!name) return;
-    mapMarkers.push(new google.maps.Marker({
-      map: map, position: pos,
-      // Fully transparent 1x1 icon, anchored so the label sits below the dot.
-      icon: {
-        path: 'M 0,0 0,0',
-        strokeOpacity: 0, fillOpacity: 0, scale: 1,
-        labelOrigin: new google.maps.Point(0, 26)
-      },
-      label: {
-        text: name,
-        color: '#ffffff',
-        fontSize: '12px',
-        fontWeight: '700',
-        className: 'maplabel'
-      },
-      clickable: false, zIndex: 1
-    }));
+    if(!mapFitted && _mapPoints.length){
+      // First view (or after a filter change): me in the middle, everyone in view.
+      if(myMapPosition() && mapFollowMe) centreOnMe(); else fitAllOnMap();
+    } else if(mapFollowMe){
+      var c = myMapPosition();
+      if(c) map.setCenter(c);
+    }
+    positionPins();
   }
 
   // ---------- sessions ----------
