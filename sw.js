@@ -1,5 +1,5 @@
 // Bok Log service worker — caches the app so it opens with no signal.
-var CACHE = 'boklog-v1';
+var CACHE = 'boklog-v2';
 var SHELL = [
   './',
   './index.html',

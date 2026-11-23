@@ -1867,9 +1867,7 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
       var captured=false;
       smoothSin=null; smoothCos=null;
       var handler = function(e){
-        var heading=null;
-        if(typeof e.webkitCompassHeading === 'number'){ heading=e.webkitCompassHeading; }
-        else if(typeof e.alpha === 'number'){ heading=(360-e.alpha)%360; }
+        var heading=headingFromEvent(e);
         if(heading===null) return;
         var rad=heading*Math.PI/180, s=Math.sin(rad), c=Math.cos(rad);
         if(smoothSin===null){ smoothSin=s; smoothCos=c; }
@@ -1934,6 +1932,13 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
     document.getElementById('compassBtn').textContent='● Compass live — tap to lock';
     window.addEventListener('deviceorientation', onOrient, true);
     window.addEventListener('deviceorientationabsolute', onOrient, true);
+    // If no usable (North-referenced) reading arrives, say so rather than
+    // leaving the button looking live while nothing happens.
+    setTimeout(function(){
+      if(compassActive && smoothSin===null){
+        toast('No compass reading — this phone may not have a compass. Use the dial.');
+      }
+    }, 2500);
   }
   function stopCompass(){
     compassActive=false;
@@ -1949,16 +1954,37 @@ Object.defineProperty(google.script, 'run', { get: function(){ return makeRunner
   var SMOOTH = 0.15;  // lower = steadier (more lag), higher = snappier
   var lastShown = null;
 
-  function onOrient(e){
-    var heading=null;
-    // Phone held flat, screen up, TOP EDGE pointed at the animal/landmark.
-    if(typeof e.webkitCompassHeading === 'number'){
-      // iPhone: webkitCompassHeading is the direction the top edge points.
-      heading = e.webkitCompassHeading;
-    } else if(typeof e.alpha === 'number'){
-      // Android: held flat, top-edge compass direction is (360 - alpha).
-      heading = (360 - e.alpha) % 360;
+  // Turn one device-orientation event into a compass heading (0 = North), or
+  // null if the event can't be trusted as a real compass reading.
+  //
+  // iPhone: webkitCompassHeading is already true-ish North for the top edge.
+  //
+  // Android Chrome fires TWO events: 'deviceorientationabsolute' (alpha is
+  // measured from North, which is what we want) and plain 'deviceorientation'
+  // (alpha is measured from wherever the phone happened to point when the page
+  // started listening — NOT North). We listen to both, so feeding both into
+  // the same smoothing mixed a real heading with an arbitrary one and the
+  // needle swung between them. Only accept events that say they're absolute.
+  var _sawAbsoluteOrient = false;
+  function headingFromEvent(e){
+    if(typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)){
+      return e.webkitCompassHeading;
     }
+    if(typeof e.alpha !== 'number' || isNaN(e.alpha)) return null;
+    var isAbsolute = (e.type === 'deviceorientationabsolute') || (e.absolute === true);
+    if(isAbsolute){
+      _sawAbsoluteOrient = true;
+    } else if(e.absolute === false || _sawAbsoluteOrient){
+      // Relative-only reading (or we already have a real compass stream).
+      return null;
+    }
+    // Phone held flat, screen up: top-edge compass direction is (360 - alpha).
+    return (360 - e.alpha) % 360;
+  }
+
+  function onOrient(e){
+    // Phone held flat, screen up, TOP EDGE pointed at the animal/landmark.
+    var heading = headingFromEvent(e);
     if(heading===null) return;
     var rad = heading * Math.PI/180;
     var s = Math.sin(rad), c = Math.cos(rad);
